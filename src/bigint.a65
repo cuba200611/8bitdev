@@ -22,7 +22,7 @@
             .radix h
 
             .globl convascdigit
-            .globl bi_readhex
+            .globl bi_readhex, bi_read_dec
 
             .area ZP  (abs,pag)
             .org 0
@@ -102,8 +102,8 @@ convascdigit:
 ;   generally allocated by the caller based on lengths of other
 ;   parameters. This has its own special pointer and length. 
 ;
-;   Where routines use multiple buffers, typically these are input,
-;   output and scratch in increasing order.
+;   Where routines use multiple buffers, typically these are ouput,
+;   input and scratch in order of increasing buffer number.
 ;
 ;   In all cases it's carefully documented whether the pointer, the
 ;   length and the buffer itself are preserved, overwritten or
@@ -120,6 +120,15 @@ buf2ptr:    .ds  2
 buf2len:    .ds  1
 buf3ptr:    .ds  2
 buf3len:    .ds  1
+
+;XXX
+;inbufptr:   .ds  2              ; pointer to text input buffer
+;outbufptr:  .ds  2              ; pointer to len byte followed by data
+;tinbuf:     .ds 2               ; pointers to temporary buffers
+;toutbuf:    .ds 2
+;buflen:     .ds 1               ; a buffer length; which one depends on routine
+;scratchbuf: .ds 2
+
             .area   _CODE
 
 ;---------------------------------------------------------------------
@@ -190,3 +199,188 @@ bi_readhex: ldx #0              ; constant for indirect addressing
             bne 5$              ; next chars
 8$:         rts                 ; success; return
 9$:         brk                 ; readhex error
+
+;---------------------------------------------------------------------
+
+;   In-place unsigned multiply by ten of a buffer. The value must be
+;   sufficiently small that the multiplication cannot overflow. This
+;   requires a scratch buffer of the same length as the number to be
+;   multiplied.
+;
+;          A, Y: (d)
+;             X: (p)
+;       buf0len: (p) [buf0ptr] length; 1 <= buf0len <= 255
+;       buf0ptr: (p) pointer to output buffer address - 1
+;     [buf0ptr]: (w) pointer to output buffer address - 1
+;       bufSptr: (p) pointer to scratch buffer address - 1
+;     [bufSptr]: (d) pointer to scratch buffer address - 1
+;
+;   Notes: It would be nice if ROL could use indirect addressing to
+;   avoid the load/store through A, but it probably doesn't make that
+;   much difference; we're currently under 100 cycles per byte of
+;   input anyway.
+;
+bi_x10u:    ldy buf0len
+            ;   Multiply the buffer by 2
+            clc
+2$:         lda [buf0ptr],y
+            rol
+            sta [buf0ptr],y
+            dey
+            bne 2$
+            ;   Make a copy of the ×2 value for later addition
+            ldy buf0len
+3$:         lda [buf0ptr],y
+            sta [bufSptr],y
+            dey
+            bne 3$
+            ;   Multiply buffer by 2 again, for ×4
+            ldy buf0len
+            clc
+4$:         lda [buf0ptr],y
+            rol
+            sta [buf0ptr],y
+            dey
+            bne 4$
+            ;   Multiply buffer by 2 again, for ×8
+            ldy buf0len
+            clc
+8$:         lda [buf0ptr],y
+            rol
+            sta [buf0ptr],y
+            dey
+            bne 8$
+            ;   Add the ×2 value, for ×10
+            ldy buf0len
+            clc
+10$:        lda [bufSptr],y
+            adc [buf0ptr],y
+            sta [buf0ptr],y
+            dey
+            bne 10$
+            rts
+
+;   Read the ASCII unsigned decimal representation of an integer and
+;   convert it to a non-normalized (i.e., may have leading 0 bytes as
+;   the MSBs) bigint. Leading zeros are converted. All characters must
+;   be ASCII decimal digits. No error checking of input characters is
+;   done; bad input produces an undefined result.
+;
+;   The output buffer must be preloaded with $00 bytes, at least 2 bytes
+;   in length, and large enough to hold the output. A reasonable
+;   heuristic for the size is half the number of digits in the input,
+;   rounded up; in the worst case this will be about 20% larger than
+;   necessary, but for up to 22 digit inputs the worst case is only
+;   two bytes larger.
+;
+;   XXX distinguish between buffer pointer and buffer contents preserved
+;
+;         A, X: (d)
+;            Y: (d) [buf1ptr] (input) length; 1 <= Y <= 255
+;      buf0ptr: (p) output buffer address - 1; see conditions above
+;  [buf0ptr+1]: (w) output buffer; must be preloaded with zeros
+;      buf0len: output buffer length; see conditions above (preserved)
+;      buf1ptr: (p) input chars buf address
+;    [buf1ptr]: (p) input chars buffer
+;   scratchbuf: (p) scratch buffer address - 1
+;        inlen: temporary storage; destroyed
+;     curdigit: temporary storage; destroyed
+;        flags: destroyed
+;
+bi_read_udec:
+            sty inlen           ; save input length
+            lda #0
+            sta curdigit        ; initial current digit index
+30$:
+            ;   Multiply current intermediate value (buf0ptr) by ten
+            jsr bi_x10u
+            ;   Add in the current digit.
+            ldy curdigit
+            inc curdigit        ; for next loop iteration
+            lda [buf1ptr],y      ; load this digit
+            eor #30             ; convert ASCII to binary
+            ldy buf0len
+            clc
+            adc [buf0ptr],y     ; add binary value of digit
+            sta [buf0ptr],y     ;  into LSB
+            lda #0              ; prepare to propagate carry
+            dey
+50$:        adc [buf0ptr],y     ; propagate carry
+            dey
+            bne 50$             ; not done; continue propagation
+            lda curdigit        ; digits remaining
+            cmp inlen
+            beq 99$             ; none, we're done
+            clc
+            bcc 30$             ; continue with next digit
+99$:        rts
+
+            .area ZP  (abs,pag)
+inlen   :   .ds 1               ; temporary storage
+curdigit:   .ds 1               ; temporary storage
+            .area _CODE
+
+;   Read the ASCII signed decimal representation of an integer and
+;   convert it to a bigint. The first character may be a optional `+`
+;   or `-` sign; all other characters must be ASCII decimal digits. No
+;   error checking of input characters is done; bad input produces an
+;   undefined result.
+;
+;            A,X: (d)
+;              Y: (d) [buf3ptr] (input) length; 1 <= A <= 255
+;        buf3ptr: (d) pointer to start of input chars
+;      [buf3ptr]: (p) input chars
+;        buf2ptr: (d) pointer to output buffer
+;      [buf2ptr]: (w) output buffer, must be length ???
+;        buf0ptr: (d)
+;        buf1ptr: (d)
+;        bufSptr: (?)
+;      [bufSptr]: (d) scratch buffer, must be length ???
+;   All inputs and registers are destroyed.
+;
+bi_read_dec:
+            ldx #0              ; constant for indirect addressing, etc.
+            ;   Check for and process a `+` or `-` prefix
+            stx sign            ; assume positive
+            lda [buf3ptr,x]
+            cmp #'-
+            bne 110$            ; no, doesn't start with `-` sign
+            dec sign            ; change sign to negative
+            bmi 150$            ; always branch to remove sign char
+110$:       cmp #'+
+            bne 200$            ; skip sign char removal
+150$:       ;   Remove the sign char from the input
+            dey
+            inc buf3ptr
+            bne 200$
+            inc buf3ptr+1
+200$:       ;   Skip past leading zeros (except last char, of course)
+           ;LDX buf3ptr         ; XXX DEBUG
+           ;BRK                 ; XXX DEBUG
+            cpy #1              ; on last char of input?
+            beq 500$            ; yes, start conversion
+            lda [buf3ptr,x]
+            cmp #'0             ; leading zero?
+            bne 500$            ; no, start conversion
+            dey                 ; otherwise skip it
+            inc buf3ptr
+            bne 200$
+            inc buf3ptr+1
+            sec
+            bcs 200$
+500$:       ;   Start conversion
+            LDX buf3ptr         ; XXX DEBUG
+            BRK                 ; XXX DEBUG
+            dey
+            cpy #0FF            ; reached end of input?
+            beq 900$            ; yes, go finish up
+            lda [buf3ptr],y
+900$:       ;   Finish up by negating, if necessary
+            lda sign
+            beq 950$            ; if positive, we're done
+            ;   XXX negate output
+950$:       rts
+
+            .area ZP  (abs,pag)
+sign:       .ds 1               ; saved sign of input
+            .area _CODE
