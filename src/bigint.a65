@@ -318,21 +318,20 @@ inlen   :   .ds 1               ; temporary storage
 curdigit:   .ds 1               ; temporary storage
             .area _CODE
 
-;   Read the ASCII signed decimal representation of an integer and
-;   convert it to a bigint. The first character may be a optional `+`
-;   or `-` sign; all other characters must be ASCII decimal digits. No
-;   error checking of input characters is done; bad input produces an
-;   undefined result.
+;   Read the ASCII signed decimal representation of an integer and convert
+;   it to a bigint. The first character may be a optional `+` or `-` sign;
+;   all other characters must be ASCII decimal digits. No error checking of
+;   input characters is done; bad input produces an undefined result.
 ;
-;   The temporary buffers [buf0ptr] and [bufSptr] should be half the
-;   length of the input rounded up plus one byte , with a minimum
-;   length of 2. (XXX These should probably be allocated and freed by
-;   this routine.)
+;   The temporary buffers pointed to by buf0ptr and bufSptr should be half
+;   the length of the input rounded up plus one byte , with a minimum
+;   length of 2. (XXX These should probably be allocated and freed by this
+;   routine.)
 ;
 ;            A,X: (d)
 ;              Y: (d)  [buf1ptr] (input) length; 1 <= A <= 255
-;        bufSptr: (pd) pointer to scratch buffer; for length see above
-;        buf0ptr: (dd) pointer to temp buffer; for length see above
+;        bufSptr: (pd) scratch buffer addr - 1; for length see above
+;        buf0ptr: (dd) temp buffer addr - 1; for length see above
 ;        buf1ptr: (dp) pointer to start of input chars
 ;        buf2ptr: (dw) pointer to output buffer
 ;
@@ -372,7 +371,7 @@ bi_read_dec:
             tya                 ; remaining input length
             clc
             ror a               ; divide by two, leaving old LSb in carry
-            adc #0              ; round up
+            adc #1              ; round up and ensure length is at least 2
             sta *temp1          ; save a copy of temp/scratch buffer length
             tay
             lda #0
@@ -381,14 +380,16 @@ bi_read_dec:
             bne 510$
             ldy *temp1          ; restore output length for bi_read_udec param
             jsr bi_read_udec
+            BRK
             inc buf0ptr         ; output starts at [buf0ptr]+1
             bne 520$
             inc buf0ptr+1
 520$:
-            LDX 0               ; XXX DEBUG
-            LDA [buf0ptr,x]     ; XXX DEBUG
-            LDX buf0ptr         ; XXX DEBUG
-            BRK                 ; XXX DEBUG
+          LDY 3               ; XXX DEBUG
+          LDA [*buf0ptr],y    ; XXX DEBUG
+          LDX *buf0ptr        ; XXX DEBUG
+          LDY *buf0ptr+1
+          BRK                 ; XXX DEBUG
 
             beq 900$            ; yes, go finish up
             lda [buf1ptr],y

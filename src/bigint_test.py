@@ -219,12 +219,13 @@ def test_bi_read_udec_max(M):
     #assert not M.mpu.processorCycles
 
 @pytest.mark.parametrize('input, bytes', [
-    (b"0",              [0x00]),
-    (b"+0",             [0x00]),
-    (b"-0",             [0x00]),
-    (b"0000",           [0x00]),
-    (b"+0001",          [0x01]),
-    (b"-00001",         [0xFF]),
+    (b'0',              [0x00]),
+    (b'+0',             [0x00]),
+    (b'-0',             [0x00]),
+    (b'0000',           [0x00]),
+    (b'+0001',          [0x01]),
+    (b'-00001',         [0xFF]),
+    (b'-1234567',       [0xFF, 0x12, 0xd6, 0x88]),
 ])
 def test_bi_read_dec(M, input, bytes):
     print('bi_read_dec:', input, bytes)
@@ -235,29 +236,39 @@ def test_bi_read_dec(M, input, bytes):
     #   system that will let bi_read_dec alloc its own temp/scratch buffers.
     #   We probably should be allocating a correctly sized buf rather than
     #   128 (big enough for all inputs) for better bounds checks.
+    #   Note that the pointers point to 1 below the buffer itself.
     scratchlen = 128
     M.depword(S.bufSptr, TSCR_ADDR-1)
-    M.deposit(TSCR_ADDR-1, [111]); M.deposit(TSCR_ADDR+scratchlen, [112])
+    M.deposit(TSCR_ADDR-1, [111] + [112]*(scratchlen-1) + [113])
     M.depword(S.buf0ptr, TTMP_ADDR-1)
-    M.deposit(TTMP_ADDR-1, [121]); M.deposit(TTMP_ADDR+scratchlen, [122])
+    M.deposit(TTMP_ADDR-1, [121] + [122]*(scratchlen-1)+[123])
 
-    M.deposit(TIN_ADDR-1, [211] + input + [212])
+    M.deposit(TIN_ADDR-1, [211] + input + [213])
     M.depword(S.buf1ptr, TIN_ADDR)
     M.depword(S.buf2ptr, TOUT_ADDR)
-    M.deposit(TOUT_ADDR-1, [222] + [223] * len(bytes) + [224])
+    M.deposit(TOUT_ADDR-1, [221] + [222] * len(bytes) + [223])
 
-    M.call(S.bi_read_dec, R(y=len(input)))
+    try:
+        M.call(S.bi_read_dec, R(y=len(input)), trace=1)
+    except M.Abort as ex:
+        print(ex)
+        print('  SCR-2', M.bytes(TSCR_ADDR-2, 12))
+        print('  TMP-2', M.bytes(TTMP_ADDR-2, 12))
+        print('buf0ptr', hex(M.word(S.buf0ptr)))
+        print('   IN-2', M.bytes(TIN_ADDR-2,  12))
+        print('  OUT-2', M.bytes(TOUT_ADDR-2, 12))
+        print('buf1ptr', hex(M.word(S.buf1ptr)))
 
     #   Assert scratch buffers were not written out of bounds
     assert [111] == M.byte(TSCR_ADDR-1)
-    assert [112] == M.byte(TSCR_ADDR+scratchlen)
+    assert [113] == M.byte(TSCR_ADDR+scratchlen)
     assert [121] == M.byte(TTMP_ADDR-1)
-    assert [122] == M.byte(TTMP_ADDR+scratchlen)
+    assert [123] == M.byte(TTMP_ADDR+scratchlen)
 
     #   Assert input buffer is unchanged
-    assert [211] + input + 212 == M.byte(TIN_ADDR-1, len(input)+2)
+    assert [211] + input + [213] == M.byte(TIN_ADDR-1, len(input)+2)
 
     #   Assert output buffer is correct and without out-of-bounds writes.
     bvalue = M.bytes(TOUT_ADDR+1, len(bytes))
-    assert [222, len(bytes)] + bytes + [224] \
+    assert [221, len(bytes)] + bytes + [223] \
         == M.byte(TOUT_ADDR-1, M.byte(TOUT_ADDR+size-1))
