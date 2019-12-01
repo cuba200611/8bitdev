@@ -225,6 +225,7 @@ def test_bi_read_udec_max(M):
     (b'0000',           [0x00]),
     (b'+0001',          [0x01]),
     (b'-00001',         [0xFF]),
+    (b'12345678',       [0x00, 0xbc, 0x61, 0x4e]),
     (b'-1234567',       [0xFF, 0x12, 0xd6, 0x88]),
 ])
 def test_bi_read_dec(M, input, bytes):
@@ -249,21 +250,22 @@ def test_bi_read_dec(M, input, bytes):
     M.deposit(TOUT_ADDR-1, [221] + [222] * len(bytes) + [223])
 
     try:
-        M.call(S.bi_read_dec, R(y=len(input)), trace=1)
+        M.call(S.bi_read_dec, R(y=len(input)))
     except M.Abort as ex:
         print(ex)
-        print('  SCR-2', M.bytes(TSCR_ADDR-2, 12))
-        print('  TMP-2', M.bytes(TTMP_ADDR-2, 12))
+        print('   sign', hex(M.word(S.sign)))
+        print('  SCR-2', list(map(hex, M.bytes(TSCR_ADDR-2, 12))))
+        print('  TMP-2', list(map(hex, M.bytes(TTMP_ADDR-2, 12))))
         print('buf0ptr', hex(M.word(S.buf0ptr)))
-        print('   IN-2', M.bytes(TIN_ADDR-2,  12))
-        print('  OUT-2', M.bytes(TOUT_ADDR-2, 12))
+        print('   IN-2', list(map(hex, M.bytes(TIN_ADDR-2,  12))))
+        print('  OUT-2', list(map(hex, M.bytes(TOUT_ADDR-2, 12))))
         print('buf1ptr', hex(M.word(S.buf1ptr)))
 
     #   Assert scratch buffers were not written out of bounds
-    assert [111] == M.byte(TSCR_ADDR-1)
-    assert [113] == M.byte(TSCR_ADDR+scratchlen)
-    assert [121] == M.byte(TTMP_ADDR-1)
-    assert [123] == M.byte(TTMP_ADDR+scratchlen)
+    assert 111 == M.byte(TSCR_ADDR-1)
+    assert 113 == M.byte(TSCR_ADDR+scratchlen)
+    assert 121 == M.byte(TTMP_ADDR-1)
+    assert 123 == M.byte(TTMP_ADDR+scratchlen)
 
     #   Assert input buffer is unchanged
     assert [211] + input + [213] == M.byte(TIN_ADDR-1, len(input)+2)
