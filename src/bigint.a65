@@ -328,6 +328,9 @@ curdigit:   .ds 1               ; temporary storage
 ;   length of 2. (XXX These should probably be allocated and freed by this
 ;   routine.)
 ;
+;   The ouput buffer will be a 1-byte count of the length followed by
+;   that many bytes.
+;
 ;            A,X: (d)
 ;              Y: (d)  [buf1ptr] (input) length; 1 <= A <= 255
 ;        bufSptr: (pd) scratch buffer addr - 1; for length see above
@@ -381,52 +384,49 @@ bi_read_dec:
             bne 310$
             ldy *buf1len        ; bi_read_udec input len param
             jsr bi_read_udec
-            inc *buf0ptr         ; output starts at [buf0ptr]+1
+            inc *buf0ptr        ; output starts at [buf0ptr]+1
             bne 400$
             inc *buf0ptr+1
 400$:       ;   Drop leading 0 bytes of unsigned conversion
             clv
-            ldx #0
+            ldx #0              ; constant for indirect addressing, etc.
 410$:       lda [*buf0ptr,x]
             bne 500$            ; not $00, thus all leading $00 stripped
-            inc *buf0ptr
+            inc *buf0len        ; strip by reducing length by one
+            inc *buf0ptr        ;   and moving start point up
             bne 410$
             inc *buf0ptr+1
             bvc 410$            ; BRA
-500$:       ;   Check to see if we need to sign-extend.
-            ;   A is currently loaded with the first non-zero digit.
-            TAX ; XXX DEBUG
-            ldy *sign           ; is our actual sign negative?
-            bpl 510$            ; no, leave this digit positive
-            eor #0FF            ; yes, do a two's complement negtation
+500$:       ;   Produce final result in buf2ptr.
+            ldy *sign           ; is our final result negative?
+            bne 600$            ; yes, go do that.
+            ;   Positive final result.
+            lda *buf0len
+            sta [*buf2ptr,x]    ; assume output len is that of bi_read_udec
+            lda [*buf0ptr,x]    ; get MSB of bi_read_udec output
+            bpl 550$            ; if positive, sign extension not required
             clc
-            adc #1
-510$:       ;   We now have the most significant binary digit of our result,
-            ;   but if this digit's sign is not correct, we need to sign-extend
-            ;   the full result with a sign byte ahead of it.
-            TAY ; XXX DEBUG
-            and #$%10000000     ; clear all bits but sign
-            eor *sign           ; see if the digit sign is same as result sign
-            bpl 520$            ; yes, we're fine
-            nop                 ; no, we must sign-extend
-            BRK
-520$:
-            BRK
-
-            ; XXX copy buf0ptr data to buf2ptr doing 2's comp conv if necessary
-           ;LDY 3               ; XXX DEBUG
-           ;LDA [*buf0ptr],y    ; XXX DEBUG
-           ;LDX *buf0ptr        ; XXX DEBUG
-           ;LDY *buf0ptr+1
-            BRK                 ; XXX DEBUG
-
-            beq 900$            ; yes, go finish up
-            lda [buf1ptr],y
-900$:       ;   Finish up by negating, if necessary
-            lda sign
-            beq 950$            ; if positive, we're done
-            ;   XXX negate output
-950$:       rts
+            adc #1              ; negative, length will be one longer
+            sta [*buf2ptr,x]
+            inc *buf2ptr        ; move past length byte
+            bne 510$
+            inc *buf2ptr+1
+510$:       txa                 ; LDA #0
+            sta [*buf2ptr,x]    ; store sign extension
+550$:       ;   Length and sign extension done; store actual number
+            inc *buf2ptr        ; move past what we've done so far
+            bne 560$
+            inc *buf2ptr+1
+560$:       ;   Copy bi_read_udec output
+            ldy *buf0len
+570$:       lda [*buf0ptr],y
+            sta [*buf2ptr],y
+            dey
+            beq 900$            ; done
+            bne 570$            ; BRA
+600$:       ;   Negative final result.
+            BRK ; XXX DEBUG
+900$:       rts
 
             .area ZP  (abs,pag)
 sign:       .ds 1               ; saved sign of input
