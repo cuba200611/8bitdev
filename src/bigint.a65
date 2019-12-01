@@ -5,6 +5,8 @@
 ;     (w) - written: value at exit is an intended output value
 ;     (d) - destroyed: value at exit may be different from value at entry
 ;           and is not useful
+;   Two letters are given for pointers: the first for the pointer itself
+;   and the second for the contents of the buffer to which it points.
 ;   Flags should be considered destroyed unless otherwise specified.
 
 ;---------------------------------------------------------------------
@@ -120,15 +122,6 @@ buf2ptr:    .ds  2
 buf2len:    .ds  1
 buf3ptr:    .ds  2
 buf3len:    .ds  1
-
-;XXX
-;inbufptr:   .ds  2              ; pointer to text input buffer
-;outbufptr:  .ds  2              ; pointer to len byte followed by data
-;tinbuf:     .ds 2               ; pointers to temporary buffers
-;toutbuf:    .ds 2
-;buflen:     .ds 1               ; a buffer length; which one depends on routine
-;scratchbuf: .ds 2
-
             .area   _CODE
 
 ;---------------------------------------------------------------------
@@ -276,28 +269,25 @@ bi_x10u:    ldy buf0len
 ;   XXX distinguish between buffer pointer and buffer contents preserved
 ;
 ;         A, X: (d)
-;            Y: (d) [buf1ptr] (input) length; 1 <= Y <= 255
-;      buf0ptr: (p) output buffer address - 1; see conditions above
-;  [buf0ptr+1]: (w) output buffer; must be preloaded with zeros
-;      buf0len: output buffer length; see conditions above (preserved)
-;      buf1ptr: (p) input chars buf address
-;    [buf1ptr]: (p) input chars buffer
-;   scratchbuf: (p) scratch buffer address - 1
+;            Y: (d)  [buf1ptr] (input) length; 1 <= Y <= 255
+;      buf0ptr: (pw) output buffer address - 1; preload with $00, len as above
+;      buf0len: (p)  output buffer length; see conditions above
+;      buf1ptr: (pp) input chars buffer address
+;      bufSptr: (pd) scratch buffer address - 1; len as above
 ;        inlen: temporary storage; destroyed
 ;     curdigit: temporary storage; destroyed
-;        flags: destroyed
 ;
 bi_read_udec:
-            sty inlen           ; save input length
+            sty *inlen          ; save input length
             lda #0
-            sta curdigit        ; initial current digit index
+            sta *curdigit       ; initial current digit index
 30$:
             ;   Multiply current intermediate value (buf0ptr) by ten
             jsr bi_x10u
             ;   Add in the current digit.
-            ldy curdigit
-            inc curdigit        ; for next loop iteration
-            lda [buf1ptr],y      ; load this digit
+            ldy *curdigit
+            inc *curdigit       ; for next loop iteration
+            lda [buf1ptr],y     ; load this digit
             eor #30             ; convert ASCII to binary
             ldy buf0len
             clc
@@ -308,8 +298,8 @@ bi_read_udec:
 50$:        adc [buf0ptr],y     ; propagate carry
             dey
             bne 50$             ; not done; continue propagation
-            lda curdigit        ; digits remaining
-            cmp inlen
+            lda *curdigit       ; digits remaining
+            cmp *inlen
             beq 99$             ; none, we're done
             clc
             bcc 30$             ; continue with next digit
@@ -326,23 +316,23 @@ curdigit:   .ds 1               ; temporary storage
 ;   error checking of input characters is done; bad input produces an
 ;   undefined result.
 ;
+;   The temporary buffers [buf0ptr] and [bufSptr] should be half the
+;   length of the input rounded up plus one byte , with a minimum
+;   length of 2. (XXX These should probably be allocated and freed by
+;   this routine.)
+;
 ;            A,X: (d)
-;              Y: (d) [buf3ptr] (input) length; 1 <= A <= 255
-;        buf3ptr: (d) pointer to start of input chars
-;      [buf3ptr]: (p) input chars
-;        buf2ptr: (d) pointer to output buffer
-;      [buf2ptr]: (w) output buffer, must be length ???
-;        buf0ptr: (d)
-;        buf1ptr: (d)
-;        bufSptr: (?)
-;      [bufSptr]: (d) scratch buffer, must be length ???
-;   All inputs and registers are destroyed.
+;              Y: (d)  [buf1ptr] (input) length; 1 <= A <= 255
+;        bufSptr: (pd) pointer to scratch buffer; for length see above
+;        buf0ptr: (dd) pointer to temp buffer; for length see above
+;        buf1ptr: (dp) pointer to start of input chars
+;        buf2ptr: (dw) pointer to output buffer
 ;
 bi_read_dec:
             ldx #0              ; constant for indirect addressing, etc.
             ;   Check for and process a `+` or `-` prefix
             stx sign            ; assume positive
-            lda [buf3ptr,x]
+            lda [buf1ptr,x]
             cmp #'-
             bne 110$            ; no, doesn't start with `-` sign
             dec sign            ; change sign to negative
@@ -350,31 +340,37 @@ bi_read_dec:
 110$:       cmp #'+
             bne 200$            ; skip sign char removal
 150$:       ;   Remove the sign char from the input
-            dey
-            inc buf3ptr
+            dey                 ; [buf1ptr] length
+            inc buf1ptr
             bne 200$
-            inc buf3ptr+1
+            inc buf1ptr+1
+            ;   XXX everything past this point wants some optimizing
 200$:       ;   Skip past leading zeros (except last char, of course)
-           ;LDX buf3ptr         ; XXX DEBUG
+           ;LDX buf1ptr         ; XXX DEBUG
            ;BRK                 ; XXX DEBUG
             cpy #1              ; on last char of input?
             beq 500$            ; yes, start conversion
-            lda [buf3ptr,x]
+            lda [buf1ptr,x]
             cmp #'0             ; leading zero?
             bne 500$            ; no, start conversion
-            dey                 ; otherwise skip it
-            inc buf3ptr
+            dey                 ; otherwise dec length and skip stat past it
+            inc buf1ptr
             bne 200$
-            inc buf3ptr+1
+            inc buf1ptr+1
             sec
             bcs 200$
 500$:       ;   Start conversion
-            LDX buf3ptr         ; XXX DEBUG
+            LDX buf1ptr         ; XXX DEBUG
             BRK                 ; XXX DEBUG
-            dey
-            cpy #0FF            ; reached end of input?
+            ;   - We "waste" the first address of buf0ptr and bufSptr
+            ;     because that's easier than dealing with the potential
+            ;     overflow when decrementing a 16-bit pointer.
+
+            jsr bi_read_udec
+            ; output starts at [buf0ptr]+1
+
             beq 900$            ; yes, go finish up
-            lda [buf3ptr],y
+            lda [buf1ptr],y
 900$:       ;   Finish up by negating, if necessary
             lda sign
             beq 950$            ; if positive, we're done
