@@ -93,6 +93,14 @@ convascdigit:
 9$:         rts
 
 ;---------------------------------------------------------------------
+;   Temporary storage bytes that may be destroyed by subroutine calls.
+;   Since subroutines are allowed to destroy these at will, they may
+;   be used freely, but only between subroutine calls.
+            .area ZP  (abs,pag)
+temp1:      .ds     1
+temp2:      .ds     1
+            .area   _CODE
+
 ;   Routines that need "buffers," or generic pointers to memory with
 ;   an optional length, use a standard set defined here. `buf0` is the
 ;   "innermost" pointer/len to be used as a parameter for routines
@@ -359,15 +367,28 @@ bi_read_dec:
             inc buf1ptr+1
             sec
             bcs 200$
-500$:       ;   Start conversion
-            LDX buf1ptr         ; XXX DEBUG
-            BRK                 ; XXX DEBUG
-            ;   - We "waste" the first address of buf0ptr and bufSptr
-            ;     because that's easier than dealing with the potential
-            ;     overflow when decrementing a 16-bit pointer.
-
+500$:
+            ;   Preload output buf0ptr with $00 for bi_read_udec.
+            tya                 ; remaining input length
+            clc
+            ror a               ; divide by two, leaving old LSb in carry
+            adc #0              ; round up
+            sta *temp1          ; save a copy of temp/scratch buffer length
+            tay
+            lda #0
+510$:       sta [buf0ptr],y     ; zero out buffer
+            dey
+            bne 510$
+            ldy *temp1          ; restore output length for bi_read_udec param
             jsr bi_read_udec
-            ; output starts at [buf0ptr]+1
+            inc buf0ptr         ; output starts at [buf0ptr]+1
+            bne 520$
+            inc buf0ptr+1
+520$:
+            LDX 0               ; XXX DEBUG
+            LDA [buf0ptr,x]     ; XXX DEBUG
+            LDX buf0ptr         ; XXX DEBUG
+            BRK                 ; XXX DEBUG
 
             beq 900$            ; yes, go finish up
             lda [buf1ptr],y

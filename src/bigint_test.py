@@ -127,6 +127,7 @@ def test_bi_readhex(M, input, bytes):
 TIN_ADDR  = 0x6FFE
 TOUT_ADDR = 0x71FE
 TSCR_ADDR = 0x73FE
+TTMP_ADDR = 0x74FE
 
 @pytest.mark.parametrize('value', [
     [0x03],
@@ -228,14 +229,35 @@ def test_bi_read_udec_max(M):
 def test_bi_read_dec(M, input, bytes):
     print('bi_read_dec:', input, bytes)
     S = M.symtab
+    input = list(input)
 
-    M.deposit(TIN_ADDR, input)
-    M.depword(S.buf3ptr, TIN_ADDR)
+    #   Allocate temp/scratch buffers. We do this here until we have an alloc
+    #   system that will let bi_read_dec alloc its own temp/scratch buffers.
+    #   We probably should be allocating a correctly sized buf rather than
+    #   128 (big enough for all inputs) for better bounds checks.
+    scratchlen = 128
+    M.depword(S.bufSptr, TSCR_ADDR-1)
+    M.deposit(TSCR_ADDR-1, [111]); M.deposit(TSCR_ADDR+scratchlen, [112])
+    M.depword(S.buf0ptr, TTMP_ADDR-1)
+    M.deposit(TTMP_ADDR-1, [121]); M.deposit(TTMP_ADDR+scratchlen, [122])
+
+    M.deposit(TIN_ADDR-1, [211] + input + [212])
+    M.depword(S.buf1ptr, TIN_ADDR)
     M.depword(S.buf2ptr, TOUT_ADDR)
-    size = len(bytes) + 2               # length byte + value + guard byte
-    M.deposit(TOUT_ADDR, [222] * size)  # 222 ensures any 0s really were written
+    M.deposit(TOUT_ADDR-1, [222] + [223] * len(bytes) + [224])
 
     M.call(S.bi_read_dec, R(y=len(input)))
+
+    #   Assert scratch buffers were not written out of bounds
+    assert [111] == M.byte(TSCR_ADDR-1)
+    assert [112] == M.byte(TSCR_ADDR+scratchlen)
+    assert [121] == M.byte(TTMP_ADDR-1)
+    assert [122] == M.byte(TTMP_ADDR+scratchlen)
+
+    #   Assert input buffer is unchanged
+    assert [211] + input + 212 == M.byte(TIN_ADDR-1, len(input)+2)
+
+    #   Assert output buffer is correct and without out-of-bounds writes.
     bvalue = M.bytes(TOUT_ADDR+1, len(bytes))
-    assert (len(bytes),     bytes,  222) \
-        == (M.byte(TOUT_ADDR), bvalue, M.byte(TOUT_ADDR+size-1))
+    assert [222, len(bytes)] + bytes + [224] \
+        == M.byte(TOUT_ADDR-1, M.byte(TOUT_ADDR+size-1))
