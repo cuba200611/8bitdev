@@ -83,8 +83,8 @@ def test_bi_readhex_error(M, input):
     S = M.symtab
 
     M.deposit(INBUF, input)
-    M.depword(S.inbufptr, INBUF)
-    M.depword(S.outbufptr, OUTBUF)
+    M.depword(S.buf0ptr, INBUF)
+    M.depword(S.buf1ptr, OUTBUF)
     M.deposit(OUTBUF, [222]*5)      # sentinel
 
     with pytest.raises(M.Abort):
@@ -109,8 +109,8 @@ def test_bi_readhex(M, input, bytes):
     S = M.symtab
 
     M.deposit(INBUF, input)
-    M.depword(S.inbufptr, INBUF)
-    M.depword(S.outbufptr, OUTBUF)
+    M.depword(S.buf0ptr, INBUF)
+    M.depword(S.buf1ptr, OUTBUF)
     size = len(bytes) + 2               # length byte + value + guard byte
     M.deposit(OUTBUF, [222] * size)     # 222 ensures any 0s really were written
 

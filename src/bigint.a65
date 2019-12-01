@@ -7,6 +7,18 @@
 ;           and is not useful
 ;   Flags should be considered destroyed unless otherwise specified.
 
+;---------------------------------------------------------------------
+
+;   Bigints are stored in big-endian format on 6502: a length byte
+;   followed by the integer in two's complement format.
+;
+;   We use big-endian format, despite being the opposite of native
+;   6502 order, because we generally want to loop from the LSB to the
+;   MSB and looping towards zero saves means we can start with the
+;   length and decrement and compare with zero, saving the CMP we'd
+;   need to do if counting up to the length.
+
+;---------------------------------------------------------------------
             .radix h
 
             .globl convascdigit
@@ -14,7 +26,14 @@
 
             .area ZP  (abs,pag)
             .org 0
+            ;   Reserve the first 16 bytes of the zero page for system-
+            ;   specific storage such as a BIOS or ROM I/O routines and
+            ;   the PIO registers on 6510 (C64 etc.)
+            .ds  10
             .area   _CODE
+
+;---------------------------------------------------------------------
+;   Routines that do not need memory storage
 
 ;   Convert ASCII character to binary number in bases up to 41.
 ;   This translates A-Z[\]^_ and a-z{|}~DEL as 10, 11...40.
@@ -71,44 +90,62 @@ convascdigit:
             ;   Since the N flag is our error code, we need not even BMI.
 9$:         rts
 
-
-;   Bigints are stored in big-endian format on 6502: a length byte
-;   followed by the integer in two's complement format.
+;---------------------------------------------------------------------
+;   Routines that need "buffers," or generic pointers to memory with
+;   an optional length, use a standard set defined here. `buf0` is the
+;   "innermost" pointer/len to be used as a parameter for routines
+;   that do not call other buffer-using routines. Routines that call
+;   that should, where they can't use the higher values (`buf1`, etc.)
+;   as their parameters.
 ;
-;   We use big-endian format, despite being the opposite of native
-;   6502 order, because we generally want to loop from the LSB to the
-;   MSB and looping towards zero saves means we can start with the
-;   length and decrement and compare with zero, saving the CMP we'd
-;   need to do if counting up to the length.
+;   Some routines also need a "scratch" buffer for temporary storage,
+;   generally allocated by the caller based on lengths of other
+;   parameters. This has its own special pointer and length. 
+;
+;   Where routines use multiple buffers, typically these are input,
+;   output and scratch in increasing order.
+;
+;   In all cases it's carefully documented whether the pointer, the
+;   length and the buffer itself are preserved, overwritten or
+;   destroyed, per the coding at the top of this file.
 
             .area ZP  (abs,pag)
-inbufptr:   .ds  2              ; pointer to text input buffer
-outbufptr:  .ds  2              ; pointer to len byte followed by data
+bufSptr:    .ds  2              ; pointer to a buffer
+bufSlen:    .ds  1              ; length of that buffer
+buf0ptr:    .ds  2
+buf0len:    .ds  1
+buf1ptr:    .ds  2
+buf1len:    .ds  1
+buf2ptr:    .ds  2
+buf2len:    .ds  1
+buf3ptr:    .ds  2
+buf3len:    .ds  1
             .area   _CODE
 
+;---------------------------------------------------------------------
 ;   Read the ASCII hex two's complement representation of an integer
 ;   and convert it to a bigint. The first bit is the sign, i.e.,
 ;   `FF00` will be read as -256 decimal; a minus prefix is not
 ;   allowed.
 ;
 ;            X, Y: (d)
-;               A: (d) inbufptr length; 1 <= A <= 255
-;        inbufptr: (d) pointer to input char buffer
-;      [inbufptr]: (p) input chars
-;       outbufptr: (d) output buffer, must be length (A+1)/2.
-;     [outbufptr]: (w) bigint output
+;               A: (d) buf0ptr length; 1 <= A <= 255
+;         buf0ptr: (d) pointer to input char buffer
+;       [buf0ptr]: (p) input chars
+;         buf1ptr: (d) output buffer, must be length (A+1)/2.
+;       [buf1ptr]: (w) bigint output
 ;
 bi_readhex: ldx #0              ; constant for indirect addressing
             ;   Start by skipping past any leading '0's.
             tay                 ; save length
-0$:         lda [*inbufptr,x]
+0$:         lda [*buf0ptr,x]
             cmp #'0
             bne 3$              ; no (more) leading zeros; start conversion
             dey                 ; reduce length
             beq 2$              ; but if it's last digit, convert the 0 anyway
-            inc *inbufptr       ; move past leading 0
+            inc *buf0ptr       ; move past leading 0
             bne 1$
-            inc *inbufptr+1
+            inc *buf0ptr+1
 1$:         clc
             bcc 0$
             ;   Conversion, two input digits at a time
@@ -118,20 +155,20 @@ bi_readhex: ldx #0              ; constant for indirect addressing
 4$:         clc
             ror                 ; output length is 1/2 input length
             adc #0              ; plus 1 if input length is odd
-            sta [*outbufptr,x]  ; store output length
-            adc *outbufptr      ; set outbufptr to end of buffer
-            sta *outbufptr
+            sta [*buf1ptr,x]  ; store output length
+            adc *buf1ptr      ; set buf1ptr to end of buffer
+            sta *buf1ptr
             bcc 5$
-            inc *outbufptr+1
-5$:         lda [*inbufptr],y   ; first char for this byte of output buffer
+            inc *buf1ptr+1
+5$:         lda [*buf0ptr],y   ; first char for this byte of output buffer
             jsr convascdigit    ; convert ASCII digit to binary
             bmi 9$              ; bad digit, error
             cmp #10
             bcs 9$              ; >=16, error
-            sta [*outbufptr,x]
+            sta [*buf1ptr,x]
             dey                 ; second char for this byte of output buffer
             bmi 8$              ; if input done, return success
-            lda [*inbufptr],y
+            lda [*buf0ptr],y
             jsr convascdigit    ; convert ASCII digit to binary
             bmi 9$              ; bad digit, error
             cmp #10
@@ -141,13 +178,13 @@ bi_readhex: ldx #0              ; constant for indirect addressing
             asl
             asl
             clc
-            adc [*outbufptr,x]
-            sta [*outbufptr,x]
-            dec *outbufptr
-            lda *outbufptr
+            adc [*buf1ptr,x]
+            sta [*buf1ptr,x]
+            dec *buf1ptr
+            lda *buf1ptr
             cmp #0FF
             bne 6$
-            dec *outbufptr+1
+            dec *buf1ptr+1
 6$:         dey
             cpy #0FF
             bne 5$              ; next chars
