@@ -220,16 +220,21 @@ def test_bi_read_decdigits(M, sign, input, bytes):
     assert [251] == M.bytes(TSCR_ADDR+osize, 1)
     assert R(x=xpreserved) == M.regs
 
-@pytest.mark.skip(msg='This test can take up to 10 seconds to run')
-def test_bi_read_decdigits_max(M):
+@pytest.mark.skip(msg='These tests can take up to 10 seconds each to run')
+@pytest.mark.parametrize('sign', [
+    0x00,   # 3,531,433 cyles, about 3.5 seconds on 1 MHz 6502
+    0xFF,   # 3,791,023 cyles, almost 4 seconds on 1 MHz 6502
+])
+def test_bi_read_decdigits_max(M, sign):
     S = M.symtab
 
-    M.deposit(S.sign, [0])
+    M.deposit(S.sign, [sign])
 
     input = b'9'*255
-    expected = list(int(input).to_bytes(128, byteorder='big', signed=True))
-    print(int(input))
-    print(expected)
+    input_i = int(input)
+    if sign: input_i = -input_i
+    expected = list(input_i.to_bytes(128, byteorder='big', signed=True))
+    print(input_i, '\n', expected)
 
     M.deposit(TIN_ADDR-1, [122] + list(input) + [133])  # guard bytes
     M.depword(S.buf1ptr, TIN_ADDR)
@@ -244,34 +249,7 @@ def test_bi_read_decdigits_max(M):
     M.call(S.bi_read_decdigits)
     assert [155] + expected + [166] == list(M.bytes(TOUT_ADDR-1, osize+2))
 
-    #   Show this takes 3,531,433 cyles, about 3.5 seconds on 1 MHz 6502.
-    #assert not M.mpu.processorCycles
-
-@pytest.mark.skip(msg='This test can take up to 10 seconds to run')
-def test_bi_read_decdigits_min(M):
-    S = M.symtab
-
-    M.deposit(S.sign, [0xFF])
-
-    input = b'9'*255
-    expected = list((-int(input)).to_bytes(128, byteorder='big', signed=True))
-    print('-', int(input), sep='')
-    print(expected)
-
-    M.deposit(TIN_ADDR-1, [122] + list(input) + [133])  # guard bytes
-    M.depword(S.buf1ptr, TIN_ADDR)
-    M.deposit(S.buf1len, [len(input)])
-
-    osize = len(expected)
-    M.deposit(S.buf0len, osize)
-    M.deposit(TOUT_ADDR-1, [155] + [0]*osize + [166])
-    M.depword(S.buf0ptr, TOUT_ADDR-1)
-    M.depword(S.bufSptr, TSCR_ADDR-1)
-
-    M.call(S.bi_read_decdigits)
-    assert [155] + expected + [166] == list(M.bytes(TOUT_ADDR-1, osize+2))
-
-    #   Show this takes 3,791,023 cyles, almost 4 seconds on 1 MHz 6502.
+    #   Uncommit to show number of cycles taken.
     #assert not M.mpu.processorCycles
 
 @pytest.mark.parametrize('input, bytes', [
