@@ -356,19 +356,30 @@ bi_read_dec:
             inc buf1ptr+1
             ;   XXX everything past this point wants some optimizing
 200$:       ;   Skip past leading zeros (except last char, of course)
-           ;LDX buf1ptr         ; XXX DEBUG
-           ;BRK                 ; XXX DEBUG
             cpy #1              ; on last char of input?
-            beq 300$            ; yes, start conversion
-            lda [buf1ptr,x]
+            beq 250$            ; XXX yes, special case for single-digit conversion
+            lda [*buf1ptr,x]
             cmp #'0             ; leading zero?
             bne 300$            ; no, start conversion
             dey                 ; otherwise dec length and skip stat past it
-            inc buf1ptr
+            inc *buf1ptr
             bne 200$
-            inc buf1ptr+1
+            inc *buf1ptr+1
             sec
             bcs 200$
+250$:       ;   We have only one char of input. We special-case 0 because
+            ;   it breaks our leading-zero-digit removal during later
+            ;   normalization. Also, it may be a common case so fast is nice.
+            lda [*buf1ptr,x]
+            cmp #'0
+            bne 300$            ; not zero, continue with standard conversion
+            ldy #1              ; output length byte location
+            tya                 ; output length value
+            sta [*buf2ptr],y
+            iny                 ; output value location
+            lda #0              ; output value
+            sta [*buf2ptr],y
+            rts
 300$:
             ;   Preload output buf0ptr with $00 for bi_read_udec.
             sty *buf1len        ; remaining input length

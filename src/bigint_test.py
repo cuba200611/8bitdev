@@ -254,20 +254,15 @@ def test_bi_read_dec(M, input, bytes):
         M.call(S.bi_read_dec, R(y=len(input)))
     except M.Abort as ex:
         print(ex)
-        #print('   sign', hex(M.word(S.sign)))
-        #print('  SCR-2', list(map(hex, M.bytes(TSCR_ADDR-2, 12))))
-        #print('  TMP-2', list(map(hex, M.bytes(TTMP_ADDR-2, 12))))
-        #print('buf0ptr', hex(M.word(S.buf0ptr)))
-        #print('   IN-2', list(map(hex, M.bytes(TIN_ADDR-2,  12))))
-        #print('  OUT-2', list(map(hex, M.bytes(TOUT_ADDR-2, 12))))
-        #print('buf1ptr', hex(M.word(S.buf1ptr)))
-    print('buf0ptr', hex(M.word(S.buf0ptr)), "\n"
-        'buf0len', hex(M.byte(S.buf0len)), "\n"
-        'buf2ptr', hex(M.word(S.buf2ptr)),
-        )
-    print(' buf0       ', list(map(hex, M.bytes(M.word(S.buf0ptr), 8))))
-    print(' buf0 TTMP-1', list(map(hex, M.bytes(TTMP_ADDR-1, 12)))) #XXX
-    print(' buf2 TOUT-1', list(map(hex, M.bytes(TOUT_ADDR-1, 12)))) #XXX
+        assert 0
+    finally:
+        print('buf1ptr', hex(M.word(S.buf1ptr)), list(map(hex, M.bytes(M.word(S.buf1ptr), 8))))
+        print('buf0ptr', hex(M.word(S.buf0ptr)), list(map(hex, M.bytes(M.word(S.buf0ptr), 8))))
+        print('buf0len', hex(M.byte(S.buf0len)))
+        print('buf2ptr', hex(M.word(S.buf2ptr)), list(map(hex, M.bytes(M.word(S.buf2ptr), 8))))
+        print(' buf0       ', list(map(hex, M.bytes(M.word(S.buf0ptr), 8))))
+        print(' buf0 TTMP-1', list(map(hex, M.bytes(TTMP_ADDR-1, 12)))) #XXX
+        print(' buf2 TOUT-1', list(map(hex, M.bytes(TOUT_ADDR-1, 12)))) #XXX
 
     #   Assert scratch buffers were not written out of bounds
     assert 111 == M.byte(TSCR_ADDR-1)
