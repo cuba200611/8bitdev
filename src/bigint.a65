@@ -394,6 +394,7 @@ bi_read_dec:
             inc buf1ptr
             bne 200$
             inc buf1ptr+1
+
             ;   XXX everything past this point wants some optimizing
 200$:       ;   Skip past leading zeros (except last char, of course)
             cpy #1              ; on last char of input?
@@ -420,26 +421,30 @@ bi_read_dec:
             lda #0              ; output value
             sta [*buf2ptr],y
             rts
+
 300$:       ;   ASCII to binary conversion by bi_read_decdigits.
-            sty *buf1len        ; remaining input length
-            tya
-            clc
-            ror a               ; divide by two, leaving old LSb in carry
+            sty *buf1len        ; set remaining input length
+            tya                 ; now we calculate the bi_read_decdigits
+            clc                 ;   temp/scratch buffer length
+            ror a               ; divide by two, leaving old LSbit in carry
             adc #1              ; round up and ensure length is at least 2
-            sta *buf0len        ; bi_read_udec temp/scratch buf len param
-            ;   buf1ptr₁/buf1len now specify the digits to read
+            sta *buf0len        ; set bi_read_decdigits parameter
+            ;   buf1ptr₁/buf1len already specify the digits to read
             jsr bi_read_decdigits
-400$:       ;   Drop leading 0 bytes of unsigned conversion
+400$:       ;   Drop leading $00/$FF bytes of conversion
             clv                 ; for later BRA
             ldy #1              ; [buf0ptr] continues to use 1-based indexing
 410$:       lda [*buf0ptr],y
-            bne 500$            ; not $00, thus all leading $00 stripped
+            cmp *sign
+            bne 500$            ; not a sign byte, thus all are stripped
             dec *buf0len        ; strip by reducing length by one
             inc *buf0ptr        ;   and moving start point up
             bne 410$
             inc *buf0ptr+1
             bvc 410$            ; BRA
 500$:       ;   Produce final result in [buf2ptr₁] with 1-based indexing.
+
+        BRK
             ldx *sign           ; is our final result negative?
             bmi 600$            ; yes, go do that.
             ;   Positive final result.
