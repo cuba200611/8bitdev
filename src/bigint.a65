@@ -293,8 +293,8 @@ bi_x10:    ldy buf0len
 ;   be about 20% larger than necessary, but for up to 22 digit inputs the
 ;   worst case is only two bytes larger.
 ;
-;         A, X: (d)
-;            Y: (d)  [buf1ptr] (input) length; 1 <= Y <= 255
+;         A, Y: (d)
+;            X: (p)
 ;     buf0ptr₁: (pw) output buffer address - 1; preload with $00, len as above
 ;     buf0len : (p)  output buffer length; see conditions above
 ;     buf1ptr₀: (pp) input chars buffer address
@@ -303,10 +303,15 @@ bi_x10:    ldy buf0len
 ;    curdigit : (d)  temporary storage
 ;
 bi_read_decdigits:
-            lda #0              ; start with most significant digit
-            sta *curdigit       ; initial current digit index
+            lda #0
+            ;   Output buffer starts with 0.
+            ldy *buf0len
+10$:        sta [*buf0ptr],y
+            dey
+            bne 10$
+            sta *curdigit       ; start with most signficant digit (at pos. 0)
             beq 33$             ; BRA; skip initial multiply of zeroed buffer
-30$:        ;   Multiply current intermediate value (buf0ptr) by ten
+30$:        ;   Multiply current intermediate value (buf0ptr) by ten.
             jsr bi_x10
 33$:        ;   Add in the current digit.
             ldy *curdigit
@@ -404,11 +409,6 @@ bi_read_dec:
             ror a               ; divide by two, leaving old LSb in carry
             adc #1              ; round up and ensure length is at least 2
             sta *buf0len        ; bi_read_udec temp/scratch buf len param
-            tay
-            lda #0
-310$:       sta [buf0ptr],y     ; zero out buffer
-            dey
-            bne 310$
             ;   buf1ptr₁/buf1len now specify the digits to read
             jsr bi_read_decdigits
            ;inc *buf0ptr        ; output starts at [buf0ptr]+1
