@@ -129,21 +129,30 @@ TOUT_ADDR = 0x71FE
 TSCR_ADDR = 0x73FE
 TTMP_ADDR = 0x74FE
 
-@pytest.mark.parametrize('value', [
-    [0x03],
-    [0x19],                         # maximum 1byte input without overflow
-    [0x19, 0x99],                   # maximum 2byte input without overflow
-    [0x02, 0xab, 0xcd, 0xef, 0x10], # 11 billion or so
-    [0x01] + [0xff]*254,            # maximum length
+@pytest.mark.parametrize('signed, value', [
+    ( 0, [0x03]), (-1, [0xFD]),
+    (-1, [0xF4]),                         # min 1 byte input
+    (-1, [0x0C]),                         # max 1 byte input
+    ( 0, [0x19]),                         # max 1 byte input (unsigned)
+    (-1, [0xFF, 0xF3]),
+    (-1, [0xF3, 0x34]),                   # min 2 byte input
+    (-1, [0x0C, 0xCC]),                   # max 2 byte input
+    ( 0, [0x19, 0x99]),                   # max 2 byte input (unsigned)
+    (-1, [0xFF, 0x87, 0x65, 0x43, 0x21]), # -20 million and a bit
+    (-1, [0x02, 0xab, 0xcd, 0xef, 0x10]), # 11 billion or so
+    (-1, [0xF4] + [0x00]*254),            # max length, approaching min value
+    (-1, [0x0B] + [0xFF]*254),            # max length, approaching max value
+    ( 0, [0x18] + [0xFF]*254),            # max length, (unsigned)
 ])
-def test_bi_x10u(M, value):
+def test_bi_x10(M, signed, value):
     S = M.symtab
 
-    decval   = int.from_bytes(value, byteorder='big', signed=False)
+    decval   = int.from_bytes(value, byteorder='big', signed=signed)
     decval10 = decval * 10
-    expected = decval10.to_bytes(len(value), byteorder='big', signed=False)
+    print('bi_x10: {} = {}'.format(list(map(hex, value)), decval))
+    expected = decval10.to_bytes(len(value), byteorder='big', signed=signed)
     expected = list(expected)
-    print('bi_x10u: {}={} -> {}={}'.format(value, decval, decval10, expected))
+    print('     -> {} = {}'.format(list(map(hex, expected)), decval10))
     buflen = len(value)
 
     #   Guard bytes around scratch buffer show we're not writing outside it.
@@ -155,7 +164,7 @@ def test_bi_x10u(M, value):
     M.depword(S.buf0ptr, TOUT_ADDR-1)
 
     M.deposit(S.buf0len, buflen)
-    M.call(S.bi_x10u)
+    M.call(S.bi_x10, R(C=1))
     assert [211] == M.bytes(TSCR_ADDR-1, 1)
     assert [212] == M.bytes(TSCR_ADDR+buflen, 1)
     assert [221] + expected + [222] == M.bytes(TOUT_ADDR-1, len(value)+2)
@@ -163,18 +172,18 @@ def test_bi_x10u(M, value):
     #   Turn this on to get a sense of how fast/slow this is.
     #assert not M.mpu.processorCycles
 
-@pytest.mark.parametrize('input, bytes', [
-    (b'0',                  [0x00, 0x00]),
-    (b'0000',               [0x00, 0x00]),
-    (b'9',                  [0x00, 0x09]),
-    (b'10',                 [0x00, 0x0A]),
-    (b'65432',              [0xFF, 0x98]),
-    (b'65432',              [0x00, 0xFF, 0x98]),
-    (b'65432',              [0x00, 0x00, 0xFF, 0x98]),
-    (b'78912345678901',     [0x47, 0xc5, 0x36, 0x55, 0x24, 0x35]),
+@pytest.mark.parametrize('sign, input, bytes', [
+    ( 0, b'0',                  [0x00, 0x00]),
+    ( 0, b'0000',               [0x00, 0x00]),
+    ( 0, b'9',                  [0x00, 0x09]),
+    ( 0, b'10',                 [0x00, 0x0A]),
+    ( 0, b'65432',              [0xFF, 0x98]),
+    ( 0, b'65432',              [0x00, 0xFF, 0x98]),
+    ( 0, b'65432',              [0x00, 0x00, 0xFF, 0x98]),
+    ( 0, b'78912345678901',     [0x47, 0xc5, 0x36, 0x55, 0x24, 0x35]),
 ])
-def test_bi_read_udec(M, input, bytes):
-    print('bi_read_udec:', input, bytes)
+def test_bi_read_decdigits(M, sign, input, bytes):
+    print('bi_read_decdigits:', input, bytes)
     S = M.symtab
 
     osize = len(bytes)
@@ -189,7 +198,8 @@ def test_bi_read_udec(M, input, bytes):
     M.deposit(TSCR_ADDR+osize, 251)
     M.depword(S.bufSptr, TSCR_ADDR-1)
 
-    M.call(S.bi_read_udec, R(y=len(input)), trace=0)
+    #   XXX add `sign` param for positive/negative
+    M.call(S.bi_read_decdigits, R(y=len(input)), trace=0)
     assert [240] + bytes + [241] == M.bytes(TOUT_ADDR-1, osize+2)
     assert [250] == M.bytes(TSCR_ADDR-1, 1)
     assert [251] == M.bytes(TSCR_ADDR+osize, 1)
