@@ -420,8 +420,7 @@ bi_read_dec:
             lda #0              ; output value
             sta [*buf2ptr],y
             rts
-300$:
-            ;   Preload output buf0ptr with $00 for bi_read_udec.
+300$:       ;   ASCII to binary conversion by bi_read_decdigits.
             sty *buf1len        ; remaining input length
             tya
             clc
@@ -430,9 +429,6 @@ bi_read_dec:
             sta *buf0len        ; bi_read_udec temp/scratch buf len param
             ;   buf1ptr₁/buf1len now specify the digits to read
             jsr bi_read_decdigits
-           ;inc *buf0ptr        ; output starts at [buf0ptr]+1
-           ;bne 400$
-           ;inc *buf0ptr+1
 400$:       ;   Drop leading 0 bytes of unsigned conversion
             clv                 ; for later BRA
             ldy #1              ; [buf0ptr] continues to use 1-based indexing
