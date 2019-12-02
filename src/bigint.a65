@@ -100,13 +100,22 @@ convascdigit:
 9$:         rts
 
 ;---------------------------------------------------------------------
+;   Common zero-page storage.
+
+            .area ZP
+
 ;   Temporary storage bytes that may be destroyed by subroutine calls.
 ;   Since subroutines are allowed to destroy these at will, they may
 ;   be used freely, but only between subroutine calls.
-            .area ZP  (abs,pag)
 temp1:      .ds     1
 temp2:      .ds     1
-            .area   _CODE
+
+;   Sign byte for numerical processing; either $00 or $FF. This is shared
+;   amongst multiple routines that co-operate on processing a number; it
+;   should only be set once by one routine during processing and used as a
+;   read-only parameter by all routines called, directly or indirectly, by
+;   that routine.
+sign:       .ds 1               ; saved sign of input
 
 ;   Routines that need "buffers," or generic pointers to memory with
 ;   an optional length, use a standard set defined here. `buf0` is the
@@ -126,7 +135,6 @@ temp2:      .ds     1
 ;   length and the buffer itself are preserved, overwritten or
 ;   destroyed, per the coding at the top of this file.
 
-            .area ZP  (abs,pag)
 bufSptr:    .ds  2              ; pointer to a buffer
 bufSlen:    .ds  1              ; length of that buffer
 buf0ptr:    .ds  2
@@ -279,26 +287,22 @@ bi_x10:    ldy buf0len
 ;   checking of input characters is done; bad input produces an undefined
 ;   result.
 ;
-;   The output buffer must be preloaded with $00 bytes, at least 2 bytes
-;   in length, and large enough to hold the output. A reasonable
-;   heuristic for the size is half the number of digits in the input,
-;   rounded up; in the worst case this will be about 20% larger than
-;   necessary, but for up to 22 digit inputs the worst case is only
-;   two bytes larger.
-;
-;   XXX distinguish between buffer pointer and buffer contents preserved
+;   The output buffer must be at least 2 bytes in length and large enough
+;   to hold the output. A reasonable heuristic for the size is half the
+;   number of digits in the input, rounded up; in the worst case this will
+;   be about 20% larger than necessary, but for up to 22 digit inputs the
+;   worst case is only two bytes larger.
 ;
 ;         A, X: (d)
 ;            Y: (d)  [buf1ptr] (input) length; 1 <= Y <= 255
-;      buf0ptr: (pw) output buffer address - 1; preload with $00, len as above
-;      buf0len: (p)  output buffer length; see conditions above
-;      buf1ptr: (pp) input chars buffer address
-;      bufSptr: (pd) scratch buffer address - 1; len as above
-;        inlen: temporary storage; destroyed
-;     curdigit: temporary storage; destroyed
+;     buf0ptr₁: (pw) output buffer address - 1; preload with $00, len as above
+;     buf0len : (p)  output buffer length; see conditions above
+;     buf1ptr₀: (pp) input chars buffer address
+;     buf1len : (p)  input buffer length: 1 <= buf1len <= 255
+;     bufSptr₁: (pd) scratch buffer address - 1; len as above
+;    curdigit : (d)  temporary storage
 ;
 bi_read_decdigits:
-            sty *inlen          ; save input length
             lda #0              ; start with most significant digit
             sta *curdigit       ; initial current digit index
             beq 33$             ; BRA; skip initial multiply of zeroed buffer
@@ -320,14 +324,13 @@ bi_read_decdigits:
             dey
             bne 50$             ; not done; continue propagation
             lda *curdigit       ; digits remaining
-            cmp *inlen
+            cmp *buf1len
             beq 99$             ; none, we're done
             clc
             bcc 30$             ; continue with next digit
 99$:        rts
 
-            .area ZP  (abs,pag)
-inlen   :   .ds 1               ; temporary storage
+            .area ZP
 curdigit:   .ds 1               ; temporary storage
             .area _CODE
 
@@ -406,7 +409,7 @@ bi_read_dec:
 310$:       sta [buf0ptr],y     ; zero out buffer
             dey
             bne 310$
-            ldy *buf1len        ; bi_read_udec input len param
+            ;   buf1ptr₁/buf1len now specify the digits to read
             jsr bi_read_decdigits
            ;inc *buf0ptr        ; output starts at [buf0ptr]+1
            ;bne 400$
@@ -480,7 +483,3 @@ bi_read_dec:
             dey
             bne 670$            ; not done yet
 900$:       rts
-
-            .area ZP  (abs,pag)
-sign:       .ds 1               ; saved sign of input
-            .area _CODE

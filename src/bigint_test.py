@@ -193,13 +193,14 @@ def test_bi_read_decdigits(M, sign, input, bytes):
 
     M.deposit(TIN_ADDR-1, b'\xDD' + input + b'\xDF')    # guard bytes
     M.depword(S.buf1ptr, TIN_ADDR)
+    M.deposit(S.buf1len, [len(input)])
 
     M.deposit(TSCR_ADDR-1, 250)                         # guard bytes
     M.deposit(TSCR_ADDR+osize, 251)
     M.depword(S.bufSptr, TSCR_ADDR-1)
 
     #   XXX add `sign` param for positive/negative
-    M.call(S.bi_read_decdigits, R(y=len(input)), trace=0)
+    M.call(S.bi_read_decdigits)
     assert [240] + bytes + [241] == M.bytes(TOUT_ADDR-1, osize+2)
     assert [250] == M.bytes(TSCR_ADDR-1, 1)
     assert [251] == M.bytes(TSCR_ADDR+osize, 1)
