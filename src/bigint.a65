@@ -336,7 +336,7 @@ curdigit:   .ds 1               ; temporary storage
 ;        bufSptr: (pd) scratch buffer addr - 1; for length see above
 ;        buf0ptr: (dd) temp buffer addr - 1; for length see above
 ;        buf1ptr: (dp) pointer to start of input chars
-;        buf2ptr: (dw) pointer to output buffer
+;       buf2ptr₁: (dw) pointer to output buffer - 1
 ;
 bi_read_dec:
             ldx #0              ; constant for indirect addressing, etc.
@@ -384,42 +384,44 @@ bi_read_dec:
             bne 310$
             ldy *buf1len        ; bi_read_udec input len param
             jsr bi_read_udec
-            inc *buf0ptr        ; output starts at [buf0ptr]+1
-            bne 400$
-            inc *buf0ptr+1
+           ;inc *buf0ptr        ; output starts at [buf0ptr]+1
+           ;bne 400$
+           ;inc *buf0ptr+1
 400$:       ;   Drop leading 0 bytes of unsigned conversion
-            clv
-            ldx #0              ; constant for indirect addressing, etc.
-410$:       lda [*buf0ptr,x]
+            clv                 ; for later BRA
+            ldy #1              ; [buf0ptr] continues to use 1-based indexing
+410$:       lda [*buf0ptr],y
             bne 500$            ; not $00, thus all leading $00 stripped
-            inc *buf0len        ; strip by reducing length by one
+            dec *buf0len        ; strip by reducing length by one
             inc *buf0ptr        ;   and moving start point up
             bne 410$
             inc *buf0ptr+1
             bvc 410$            ; BRA
-500$:       ;   Produce final result in buf2ptr.
-            ldy *sign           ; is our final result negative?
-            bne 600$            ; yes, go do that.
+500$:       ;   Produce final result in [buf2ptr₁] with 1-based indexing.
+            ldx *sign           ; is our final result negative?
+            bmi 600$            ; yes, go do that.
             ;   Positive final result.
+            ;   Calculate and store length.
             lda *buf0len
-            sta [*buf2ptr,x]    ; assume output len is that of bi_read_udec
-            lda [*buf0ptr,x]    ; get MSB of bi_read_udec output
+            sta [*buf2ptr],y    ; assume output len is that of bi_read_udec
+            lda [*buf0ptr],y    ; get MSB of bi_read_udec output
             bpl 550$            ; if positive, sign extension not required
+            lda [*buf2ptr],y    ; it's negative; increment length
             clc
-            adc #1              ; negative, length will be one longer
-            sta [*buf2ptr,x]
-            inc *buf2ptr        ; move past length byte
+            adc #1
+            sta [*buf2ptr],y
+            inc *buf2ptr        ; and move past length byte
             bne 510$
             inc *buf2ptr+1
-510$:       txa                 ; LDA #0
-            sta [*buf2ptr,x]    ; store sign extension
-550$:       ;   Length and sign extension done; store actual number
-            inc *buf2ptr        ; move past what we've done so far
+510$:       lda #0              ; positive sign extension
+            sta [*buf2ptr],y    ;   in MSB of result
+550$:       ;   Length and sign extension done; copy bi_read_udec output
+            ;   (buf0ptr and buf2ptr continue with using 1-based indexing here)
+            inc *buf2ptr        ; move past len/sign-ext byte
             bne 560$
             inc *buf2ptr+1
-560$:       ;   Copy bi_read_udec output
-            ldy *buf0len
-570$:       lda [*buf0ptr],y
+560$:       ldy *buf0len        ; start at LSB
+570$:       lda [*buf0ptr],y    ; and copy up to MSB
             sta [*buf2ptr],y
             dey
             beq 900$            ; done

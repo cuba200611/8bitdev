@@ -244,22 +244,30 @@ def test_bi_read_dec(M, input, bytes):
     M.depword(S.buf0ptr, TTMP_ADDR-1)
     M.deposit(TTMP_ADDR-1, [121] + [122]*scratchlen + [123])
 
-    M.deposit(TIN_ADDR-1, [211] + input + [213])
     M.depword(S.buf1ptr, TIN_ADDR)
-    M.depword(S.buf2ptr, TOUT_ADDR)
-    M.deposit(TOUT_ADDR-1, [221] + [222] * len(bytes) + [223])
+    M.deposit(TIN_ADDR-1, [211] + input + [213])
+    M.depword(S.buf2ptr, TOUT_ADDR-1)
+    #   guard, output length, output value, guard
+    M.deposit(TOUT_ADDR-1, [221, 222] + [223] * len(bytes) + [224])
 
     try:
         M.call(S.bi_read_dec, R(y=len(input)))
     except M.Abort as ex:
         print(ex)
-        print('   sign', hex(M.word(S.sign)))
-        print('  SCR-2', list(map(hex, M.bytes(TSCR_ADDR-2, 12))))
-        print('  TMP-2', list(map(hex, M.bytes(TTMP_ADDR-2, 12))))
-        print('buf0ptr', hex(M.word(S.buf0ptr)))
-        print('   IN-2', list(map(hex, M.bytes(TIN_ADDR-2,  12))))
-        print('  OUT-2', list(map(hex, M.bytes(TOUT_ADDR-2, 12))))
-        print('buf1ptr', hex(M.word(S.buf1ptr)))
+        #print('   sign', hex(M.word(S.sign)))
+        #print('  SCR-2', list(map(hex, M.bytes(TSCR_ADDR-2, 12))))
+        #print('  TMP-2', list(map(hex, M.bytes(TTMP_ADDR-2, 12))))
+        #print('buf0ptr', hex(M.word(S.buf0ptr)))
+        #print('   IN-2', list(map(hex, M.bytes(TIN_ADDR-2,  12))))
+        #print('  OUT-2', list(map(hex, M.bytes(TOUT_ADDR-2, 12))))
+        #print('buf1ptr', hex(M.word(S.buf1ptr)))
+    print('buf0ptr', hex(M.word(S.buf0ptr)), "\n"
+        'buf0len', hex(M.byte(S.buf0len)), "\n"
+        'buf2ptr', hex(M.word(S.buf2ptr)),
+        )
+    print(' buf0       ', list(map(hex, M.bytes(M.word(S.buf0ptr), 8))))
+    print(' buf0 TTMP-1', list(map(hex, M.bytes(TTMP_ADDR-1, 12)))) #XXX
+    print(' buf2 TOUT-1', list(map(hex, M.bytes(TOUT_ADDR-1, 12)))) #XXX
 
     #   Assert scratch buffers were not written out of bounds
     assert 111 == M.byte(TSCR_ADDR-1)
@@ -271,6 +279,5 @@ def test_bi_read_dec(M, input, bytes):
     assert [211] + input + [213] == M.bytes(TIN_ADDR-1, len(input)+2)
 
     #   Assert output buffer is correct and without out-of-bounds writes.
-    bvalue = M.bytes(TOUT_ADDR+1, len(bytes))
-    assert [221, len(bytes)] + bytes + [223] \
-        == M.byte(TOUT_ADDR-1, M.byte(TOUT_ADDR+size-1))
+    assert [221, len(bytes)] + bytes + [224] \
+        == M.bytes(TOUT_ADDR-1, len(bytes)+3)
