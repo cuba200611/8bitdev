@@ -174,17 +174,26 @@ def test_bi_x10(M, signed, value):
 
 @pytest.mark.parametrize('sign, input, bytes', [
     ( 0, b'0',                  [0x00, 0x00]),
+    (-1, b'0',                  [0x00, 0x00]),
     ( 0, b'0000',               [0x00, 0x00]),
     ( 0, b'9',                  [0x00, 0x09]),
+    (-1, b'3',                  [0xFF, 0xFD]),
     ( 0, b'10',                 [0x00, 0x0A]),
     ( 0, b'65432',              [0xFF, 0x98]),
     ( 0, b'65432',              [0x00, 0xFF, 0x98]),
     ( 0, b'65432',              [0x00, 0x00, 0xFF, 0x98]),
-    ( 0, b'78912345678901',     [0x47, 0xc5, 0x36, 0x55, 0x24, 0x35]),
+    (-1, b'64321',              [0xFF, 0x04, 0xBF]),
+    (-1, b'64321',              [0xFF, 0xFF, 0xFF, 0x04, 0xBF]),
+    ( 0, b'78912345678901',     [0x47, 0xC5, 0x36, 0x55, 0x24, 0x35]),
+    (-1, b'78912345678901',     [0xB8, 0x3A, 0xC9, 0xAA, 0xDB, 0xCB]),
+    (-1, b'78912345678901',     [0xFF, 0xB8, 0x3A, 0xC9, 0xAA, 0xDB, 0xCB]),
 ])
 def test_bi_read_decdigits(M, sign, input, bytes):
     print('bi_read_decdigits:', input, bytes)
     S = M.symtab
+
+    if sign != 0: sign = 0xFF
+    M.deposit(S.sign, [sign])
 
     osize = len(bytes)
     M.deposit(S.buf0len, osize)
@@ -202,23 +211,29 @@ def test_bi_read_decdigits(M, sign, input, bytes):
     xpreserved = bytes[1] + 17                          # kinda random
 
     #   XXX add `sign` param for positive/negative
-    M.call(S.bi_read_decdigits, R(x=xpreserved))
+    try:
+        M.call(S.bi_read_decdigits, R(x=xpreserved))
+    finally:
+        print('buf0', M.bytes(TOUT_ADDR-1, 12))
     assert [240] + bytes + [242] == M.bytes(TOUT_ADDR-1, osize+2)
     assert [250] == M.bytes(TSCR_ADDR-1, 1)
     assert [251] == M.bytes(TSCR_ADDR+osize, 1)
     assert R(x=xpreserved) == M.regs
 
 @pytest.mark.skip(msg='This test can take up to 10 seconds to run')
-def test_bi_read_udec_max(M):
+def test_bi_read_decdigits_max(M):
     S = M.symtab
 
+    M.deposit(S.sign, [0])
+
     input = b'9'*255
-    expected = list(int(input).to_bytes(128, byteorder='big', signed=False))
+    expected = list(int(input).to_bytes(128, byteorder='big', signed=True))
     print(int(input))
     print(expected)
 
     M.deposit(TIN_ADDR-1, [122] + list(input) + [133])  # guard bytes
     M.depword(S.buf1ptr, TIN_ADDR)
+    M.deposit(S.buf1len, [len(input)])
 
     osize = len(expected)
     M.deposit(S.buf0len, osize)
@@ -226,10 +241,37 @@ def test_bi_read_udec_max(M):
     M.depword(S.buf0ptr, TOUT_ADDR-1)
     M.depword(S.bufSptr, TSCR_ADDR-1)
 
-    M.call(S.bi_read_udec, R(y=len(input)), trace=0)
+    M.call(S.bi_read_decdigits)
     assert [155] + expected + [166] == list(M.bytes(TOUT_ADDR-1, osize+2))
 
-    #   Show this takes 3,541,444 cyles, about 3.5 seconds on 1 MHz 6502.
+    #   Show this takes 3,531,433 cyles, about 3.5 seconds on 1 MHz 6502.
+    #assert not M.mpu.processorCycles
+
+@pytest.mark.skip(msg='This test can take up to 10 seconds to run')
+def test_bi_read_decdigits_min(M):
+    S = M.symtab
+
+    M.deposit(S.sign, [0xFF])
+
+    input = b'9'*255
+    expected = list((-int(input)).to_bytes(128, byteorder='big', signed=True))
+    print('-', int(input), sep='')
+    print(expected)
+
+    M.deposit(TIN_ADDR-1, [122] + list(input) + [133])  # guard bytes
+    M.depword(S.buf1ptr, TIN_ADDR)
+    M.deposit(S.buf1len, [len(input)])
+
+    osize = len(expected)
+    M.deposit(S.buf0len, osize)
+    M.deposit(TOUT_ADDR-1, [155] + [0]*osize + [166])
+    M.depword(S.buf0ptr, TOUT_ADDR-1)
+    M.depword(S.bufSptr, TSCR_ADDR-1)
+
+    M.call(S.bi_read_decdigits)
+    assert [155] + expected + [166] == list(M.bytes(TOUT_ADDR-1, osize+2))
+
+    #   Show this takes 3,791,023 cyles, almost 4 seconds on 1 MHz 6502.
     #assert not M.mpu.processorCycles
 
 @pytest.mark.parametrize('input, bytes', [

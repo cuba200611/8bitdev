@@ -313,26 +313,45 @@ bi_read_decdigits:
             beq 33$             ; BRA; skip initial multiply of zeroed buffer
 30$:        ;   Multiply current intermediate value (buf0ptr) by ten.
             jsr bi_x10
-33$:        ;   Add in the current digit.
+33$:        ;   Add in or subtract the current digit.
             ldy *curdigit
             inc *curdigit       ; for next loop iteration
             lda [buf1ptr],y     ; load this digit
             eor #30             ; convert ASCII to binary
             ldy buf0len
+            bit *sign           ; load high bit of sign into N flag
+            bmi 60$             ; if negative, go subtract
 
+50$:        ;   Add binary value of digit into output
             clc
-            adc [buf0ptr],y     ; add binary value of digit
-            sta [buf0ptr],y     ;  into LSB
+            adc [buf0ptr],y     ; calculate new LSB
+            sta [buf0ptr],y     ;   and store it
             lda #0              ; prepare to propagate carry
             dey
-50$:        adc [buf0ptr],y     ; propagate carry
+55$:        adc [buf0ptr],y     ; propagate carry
             dey
-            bne 50$             ; not done; continue propagation
+            bne 55$             ; not done; continue propagation
+            beq 70$             ; BRA; done, on to next digit
+
+60$:        ;   Subtract binary value of digit from output
+            sta *temp1          ; subtrahend must be in memory
+            lda [buf0ptr],y     ; load current LSB
+            sec
+            sbc *temp1          ; calculate new LSB
+            sta [buf0ptr],y     ;   and store it
+            dey
+65$:        lda [buf0ptr],y     ; propagate carry
+            sbc #0
+            sta [buf0ptr],y
+            dey
+            bne 65$             ; not done; continue propagation
+
+70$:        ;   Propagation complete; on to next digit
             lda *curdigit       ; digits remaining
             cmp *buf1len
             beq 99$             ; none, we're done
             clc
-            bcc 30$             ; continue with next digit
+            bcc 30$             ; BRA; continue with next digit
 99$:        rts
 
             .area ZP
