@@ -240,9 +240,9 @@ def test_bi_read_dec(M, input, bytes):
     #   Note that the pointers point to 1 below the buffer itself.
     scratchlen = 128
     M.depword(S.bufSptr, TSCR_ADDR-1)
-    M.deposit(TSCR_ADDR-1, [111] + [112]*(scratchlen-1) + [113])
+    M.deposit(TSCR_ADDR-1, [111] + [112]*scratchlen + [113])
     M.depword(S.buf0ptr, TTMP_ADDR-1)
-    M.deposit(TTMP_ADDR-1, [121] + [122]*(scratchlen-1)+[123])
+    M.deposit(TTMP_ADDR-1, [121] + [122]*scratchlen + [123])
 
     M.deposit(TIN_ADDR-1, [211] + input + [213])
     M.depword(S.buf1ptr, TIN_ADDR)
@@ -268,7 +268,7 @@ def test_bi_read_dec(M, input, bytes):
     assert 123 == M.byte(TTMP_ADDR+scratchlen)
 
     #   Assert input buffer is unchanged
-    assert [211] + input + [213] == M.byte(TIN_ADDR-1, len(input)+2)
+    assert [211] + input + [213] == M.bytes(TIN_ADDR-1, len(input)+2)
 
     #   Assert output buffer is correct and without out-of-bounds writes.
     bvalue = M.bytes(TOUT_ADDR+1, len(bytes))
