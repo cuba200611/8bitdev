@@ -224,9 +224,10 @@ def test_bi_read_udec_max(M):
     (b'-0',             [0x00]),
     (b'0000',           [0x00]),
     (b'+0001',          [0x01]),
-    (b'-00001',         [0xFF]),
     (b'12345678',       [0x00, 0xbc, 0x61, 0x4e]),
-    (b'-1234567',       [0xFF, 0x12, 0xd6, 0x88]),
+    (b'-00001',         [0xFF]),
+    (b'-1234567',       [      0xed, 0x29, 0x79]),
+    (b'-12345678',      [0xff, 0x43, 0x9e, 0xb2]),
 ])
 def test_bi_read_dec(M, input, bytes):
     print('bi_read_dec:', input, bytes)
