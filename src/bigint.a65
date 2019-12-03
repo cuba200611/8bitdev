@@ -395,26 +395,25 @@ bi_read_dec:
             inc buf1ptr
             bne 200$
             inc buf1ptr+1
-
-            ;   XXX everything past this point wants some optimizing
 200$:       ;   Skip past leading zeros (except last char, of course)
             cpy #1              ; on last char of input?
-            beq 250$            ; XXX yes, special case for single-digit conversion
+            beq 300$            ; yes, special case for single-digit conversion
             lda [*buf1ptr,x]
             cmp #'0             ; leading zero?
-            bne 300$            ; no, start conversion
+            bne 500$            ; no, start conversion
             dey                 ; otherwise dec length and skip stat past it
             inc *buf1ptr
             bne 200$
             inc *buf1ptr+1
             sec
             bcs 200$
-250$:       ;   We have only one char of input. We special-case 0 because
+
+300$:       ;   We have only one char of input. We special-case 0 because
             ;   it breaks our leading-zero-digit removal during later
             ;   normalization. Also, it may be a common case so fast is nice.
             lda [*buf1ptr,x]
             cmp #'0
-            bne 300$            ; not zero, continue with standard conversion
+            bne 500$            ; not zero, continue with standard conversion
             ldy #0              ; output length byte location
             lda #1              ; output length value
             sta [*buf2ptr],y
@@ -423,7 +422,7 @@ bi_read_dec:
             sta [*buf2ptr],y
             rts
 
-300$:       ;   ASCII to binary conversion by bi_read_decdigits.
+500$:       ;   ASCII to binary conversion by bi_read_decdigits.
                                 ; buf1ptr₁ already points to start of input
             sty *buf1len        ; set remaining input length
             tya                 ; calculate the temp/scratch buffer length
@@ -432,84 +431,31 @@ bi_read_dec:
             adc #1              ;   round up and ensure length is at least 2
             sta *buf0len        ;   set output buf size
             jsr bi_read_decdigits
-400$:       ;   Normalize by dropping redundant leading sign bytes
+800$:       ;   Normalize by dropping redundant leading sign bytes
             clv                 ; for later BRA
             ldy #1              ; [buf0ptr₁] uses 1-based indexing
-410$:       lda [*buf0ptr],y
+810$:       lda [*buf0ptr],y
             cmp *sign
-            bne 500$            ; not a sign extension byte, we're normalized
+            bne 900$            ; not a sign extension byte, we're normalized
             iny                 ; check following byte
             lda [*buf0ptr],y
             eor *sign           ; sign bit same as sign?
-            bmi 500$            ; no, we're done with normalization, keeping
+            bmi 900$            ; no, we're done with normalization, keeping
                                 ;   this byte to preserve sign
             dey                 ; set Y back to start of buf for next iteration
             dec *buf0len        ; drop this byte by reducing length by one
             inc *buf0ptr        ;   and moving start point up
-            bne 410$
+            bne 810$
             inc *buf0ptr+1
-            bvc 410$            ; BRA
-500$:       ;   Produce final result in [buf2ptr₁] with 1-based indexing.
+            bvc 810$            ; BRA
+900$:       ;   Produce final result in [buf2ptr₁] with 1-based indexing.
             lda *buf0len        ; Store length as
             ldy #0              ;   first byte of
-            sta [*buf2ptr],y    ;   [buf2ptr]
-
-       BRK
-            ldx *sign           ; is our final result negative?
-            bmi 600$            ; yes, go do that.
-            ;   Positive final result.
-            ;   Calculate and store length.
-            lda *buf0len
+            sta [*buf2ptr],y    ;   [buf2ptr₀]
+            ;   Copy normalized value to output buffer
+            ldy *buf0len
+910$:       lda [*buf0ptr],y
             sta [*buf2ptr],y    ; assume output len is that of bi_read_udec
-            lda [*buf0ptr],y    ; get MSB of bi_read_udec output
-            bpl 550$            ; if positive, sign extension not required
-            lda [*buf2ptr],y    ; it's negative; increment length
-            clc
-            adc #1
-            sta [*buf2ptr],y
-            inc *buf2ptr        ; and move past length byte
-            bne 510$
-            inc *buf2ptr+1
-510$:       lda #0              ; positive sign extension
-            sta [*buf2ptr],y    ;   in MSB of result
-550$:       ;   Length and sign extension done; copy bi_read_udec output
-            ;   (buf0ptr and buf2ptr continue with using 1-based indexing here)
-            inc *buf2ptr        ; move past len/sign-ext byte
-            bne 560$
-            inc *buf2ptr+1
-560$:       ldy *buf0len        ; start at LSB
-570$:       lda [*buf0ptr],y    ; and copy up to MSB
-            sta [*buf2ptr],y
             dey
-            beq 900$            ; done
-            bne 570$            ; BRA
-600$:       ;   Negative final result.
-            ;   Calculate and store length.
-            lda *buf0len
-            sta [*buf2ptr],y    ; assume output len is that of bi_read_udec
-            lda [*buf0ptr],y    ; get MSB of bi_read_udec output
-            bpl 650$            ; if positive, 2's complement will fit into
-                                ; a byte so sign extension not required
-            lda [*buf2ptr],y    ; negative extension needed; increment length
-            clc
-            adc #1
-            sta [*buf2ptr],y
-            inc *buf2ptr        ; and move past length byte
-            bne 610$
-            inc *buf2ptr+1
-610$:       lda #0FF            ; negative sign extension
-            sta [*buf2ptr],y    ;   in MSB of result
-650$:       ;   Length and sign extension done
-            inc *buf2ptr        ; move past len/sign-ext byte
-            bne 660$
-            inc *buf2ptr+1
-660$:       clc
-            ldy *buf0len        ; start at LSB
-670$:       lda [*buf0ptr],y
-        BRK
-            eor #0FF            ; convert...
-            adc #1              ;   ...to 2's complement
-            sta [*buf2ptr],y
-            dey
-            bne 670$            ; not done yet
-900$:       rts
+            bne 910$
+            rts

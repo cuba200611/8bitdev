@@ -294,9 +294,9 @@ def test_bi_read_dec(M, input, bytes):
        #print('buf1ptr', hex(M.word(S.buf1ptr)), list(map(hex, M.bytes(M.word(S.buf1ptr), 8))))
         print('buf0ptr', hex(M.word(S.buf0ptr)), list(map(hex, M.bytes(M.word(S.buf0ptr), 8))))
         print('buf0len', hex(M.byte(S.buf0len)))
-        print('buf2ptr', hex(M.word(S.buf2ptr)), list(map(hex, M.bytes(M.word(S.buf2ptr), 8))))
         print('   buf0       ', list(map(hex, M.bytes(M.word(S.buf0ptr), 8))))
-        print(' buf0 TTMP-1', list(map(hex, M.bytes(TTMP_ADDR-1, 12)))) #XXX
+       #print(' buf0 TTMP-1', list(map(hex, M.bytes(TTMP_ADDR-1, 12)))) #XXX
+        print('buf2ptr', hex(M.word(S.buf2ptr)), list(map(hex, M.bytes(M.word(S.buf2ptr), 8))))
        #print(' buf2 TOUT-1', list(map(hex, M.bytes(TOUT_ADDR-1, 12)))) #XXX
 
     #   Assert scratch buffers were not written out of bounds
