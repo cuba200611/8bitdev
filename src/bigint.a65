@@ -315,6 +315,9 @@ bi_x10:     ldy *buf0len
 ;         A, Y: (d)
 ;            X: (p)
 ;
+;   XXX Check the carry to see if there's anything to propagate,
+;   and shortcut if there isn't?
+;
 bi_read_decdigits:
             ;   Set output buffer to starting value of zero.
             lda #0
@@ -332,16 +335,16 @@ bi_read_decdigits:
             inc *curdigit       ; for next loop iteration
             lda [buf1ptr],y     ; load this digit
             eor #30             ; convert ASCII to binary
-            ldy buf0len
+            ldy *buf0len        ; LSB index for by following add/sub code
             bit *sign           ; load high bit of sign into N flag
             bmi 60$             ; if negative, go subtract
 
-50$:        ;   Add binary value of digit into output
+50$:        ;   Add binary value of digit in A into output
             clc
             adc [buf0ptr],y     ; add LSB to new digit
             sta [buf0ptr],y     ;   and store new LSB
 52$:        dey                 ; another byte?
-            beq 70$             ; no, we're done
+            beq 70$             ; no, carry propagation complete
             lda [buf0ptr],y
             adc #0              ; propagate carry
             sta [buf0ptr],y
