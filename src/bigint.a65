@@ -368,15 +368,16 @@ curdigit:   .ds 1               ; temporary storage
 ;   length of 2. (XXX These should probably be allocated and freed by this
 ;   routine.)
 ;
-;   The ouput buffer will be a 1-byte count of the length followed by
-;   that many bytes.
+;   The ouput buffer will be a 1-byte count of the length followed by that
+;   many bytes. XXX figure out how to handle length allocation of this.
+;   Probably also allocated by the routine.
 ;
 ;            A,X: (d)
 ;              Y: (d)  [buf1ptr] (input) length; 1 <= A <= 255
 ;        bufSptr: (pd) scratch buffer addr - 1; for length see above
 ;        buf0ptr: (dd) temp buffer addr - 1; for length see above
 ;        buf1ptr: (dp) pointer to start of input chars
-;       buf2ptr₁: (dw) pointer to output buffer - 1
+;       buf2ptr₀: (dw) pointer to output buffer for len+value
 ;
 bi_read_dec:
             ldx #0              ; constant for indirect addressing, etc.
@@ -414,11 +415,11 @@ bi_read_dec:
             lda [*buf1ptr,x]
             cmp #'0
             bne 300$            ; not zero, continue with standard conversion
-            ldy #1              ; output length byte location
-            tya                 ; output length value
+            ldy #0              ; output length byte location
+            lda #1              ; output length value
             sta [*buf2ptr],y
+            tya                 ; ouput value (0) to A
             iny                 ; output value location
-            lda #0              ; output value
             sta [*buf2ptr],y
             rts
 
@@ -449,8 +450,11 @@ bi_read_dec:
             inc *buf0ptr+1
             bvc 410$            ; BRA
 500$:       ;   Produce final result in [buf2ptr₁] with 1-based indexing.
+            lda *buf0len        ; Store length as
+            ldy #0              ;   first byte of
+            sta [*buf2ptr],y    ;   [buf2ptr]
 
-       ;BRK
+       BRK
             ldx *sign           ; is our final result negative?
             bmi 600$            ; yes, go do that.
             ;   Positive final result.
