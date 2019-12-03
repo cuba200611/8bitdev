@@ -228,7 +228,8 @@ def test_bi_read_decdigits(M, sign, input, buf):
     M.deposit(TSCR_ADDR+osize, 251)
     M.depword(S.bufSptr, TSCR_ADDR-1)
 
-    xpreserved = buf[1] + 17                            # kinda random
+    #   This value should be moderately different for many tests.
+    xpreserved = (sum(map(int, input)) + sign) % 191 + 31
 
     #   XXX add `sign` param for positive/negative
     try:
