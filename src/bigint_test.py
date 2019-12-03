@@ -172,30 +172,46 @@ def test_bi_x10(M, signed, value):
     #   Turn this on to get a sense of how fast/slow this is.
     #assert not M.mpu.processorCycles
 
-@pytest.mark.parametrize('sign, input, bytes', [
-    ( 0, b'0',                  [0x00, 0x00]),
-    (-1, b'0',                  [0x00, 0x00]),
-    ( 0, b'0000',               [0x00, 0x00]),
-    ( 0, b'9',                  [0x00, 0x09]),
-    (-1, b'3',                  [0xFF, 0xFD]),
-    ( 0, b'10',                 [0x00, 0x0A]),
-    ( 0, b'65432',              [0xFF, 0x98]),
-    ( 0, b'65432',              [0x00, 0xFF, 0x98]),
-    ( 0, b'65432',              [0x00, 0x00, 0xFF, 0x98]),
-    (-1, b'64321',              [0xFF, 0x04, 0xBF]),
-    (-1, b'64321',              [0xFF, 0xFF, 0xFF, 0x04, 0xBF]),
-    ( 0, b'78912345678901',     [0x47, 0xC5, 0x36, 0x55, 0x24, 0x35]),
-    (-1, b'78912345678901',     [0xB8, 0x3A, 0xC9, 0xAA, 0xDB, 0xCB]),
-    (-1, b'78912345678901',     [0xFF, 0xB8, 0x3A, 0xC9, 0xAA, 0xDB, 0xCB]),
+@pytest.mark.parametrize('sign, input, buf', [
+    ( 0, b'0',      [0x00, 0x00]),
+    ( 0, b'0',      [0x00, 0x00]),
+    (-1, b'0',      [0x00, 0x00]),
+    ( 0, b'0000',   [0x00, 0x00]),
+    ( 0, b'9',      [0x00, 0x09]),
+    (-1, b'3',      [0xFF, 0xFD]),
+    ( 0, b'10',     [0x00, 0x0A]),
+
+    #   Some smaller byte-boundry edge cases.
+    #   These help test carry propagation.
+    ( 0, b'32767',          [                  0x7F, 0xFF]),
+    ( 0, b'32768',          [                  0x80, 0x00]),
+    ( 0, b'2147483647',     [      0x7F, 0xFF, 0xFF, 0xFF]),
+    ( 0, b'2147483648',     [      0x80, 0x00, 0x00, 0x00]),
+    (-1, b'32768',          [                  0x80, 0x00]),
+    (-1, b'32769',          [                  0x7F, 0xFF]),
+    (-1, b'32769',          [            0xFF, 0x7F, 0xFF]),
+    (-1, b'2147483648',     [      0x80, 0x00, 0x00, 0x00]),
+    (-1, b'2147483648',     [0xFF, 0x80, 0x00, 0x00, 0x00]),
+    (-1, b'2147483649',     [      0x7F, 0xFF, 0xFF, 0xFF]),
+    (-1, b'2147483649',     [0xFF, 0x7F, 0xFF, 0xFF, 0xFF]),
+
+    ( 0, b'65432',          [                              0xFF, 0x98]),
+    ( 0, b'65432',          [                        0x00, 0xFF, 0x98]),
+    ( 0, b'65432',          [                  0x00, 0x00, 0xFF, 0x98]),
+    (-1, b'64321',          [                        0xFF, 0x04, 0xBF]),
+    (-1, b'64321',          [            0xFF, 0xFF, 0xFF, 0x04, 0xBF]),
+    ( 0, b'78912345678901', [      0x47, 0xC5, 0x36, 0x55, 0x24, 0x35]),
+    (-1, b'78912345678901', [      0xB8, 0x3A, 0xC9, 0xAA, 0xDB, 0xCB]),
+    (-1, b'78912345678901', [0xFF, 0xB8, 0x3A, 0xC9, 0xAA, 0xDB, 0xCB]),
 ])
-def test_bi_read_decdigits(M, sign, input, bytes):
-    print('bi_read_decdigits:', input, bytes)
+def test_bi_read_decdigits(M, sign, input, buf):
+    print('bi_read_decdigits:', input, buf)
     S = M.symtab
 
     if sign != 0: sign = 0xFF
     M.deposit(S.sign, [sign])
 
-    osize = len(bytes)
+    osize = len(buf)
     M.deposit(S.buf0len, osize)
     M.deposit(TOUT_ADDR-1, [240] + [241]*osize + [242])
     M.depword(S.buf0ptr, TOUT_ADDR-1)
@@ -208,14 +224,16 @@ def test_bi_read_decdigits(M, sign, input, bytes):
     M.deposit(TSCR_ADDR+osize, 251)
     M.depword(S.bufSptr, TSCR_ADDR-1)
 
-    xpreserved = bytes[1] + 17                          # kinda random
+    xpreserved = buf[1] + 17                            # kinda random
 
     #   XXX add `sign` param for positive/negative
     try:
         M.call(S.bi_read_decdigits, R(x=xpreserved))
     finally:
-        print('buf0', M.bytes(TOUT_ADDR-1, 12))
-    assert [240] + bytes + [242] == M.bytes(TOUT_ADDR-1, osize+2)
+        print(M.regs)
+        print('di={} buf0={}'.format(M.byte(S.curdigit),
+            list(map(hex, M.bytes(TOUT_ADDR-1, osize+2)))))
+    assert [240] + buf + [242] == M.bytes(TOUT_ADDR-1, osize+2)
     assert [250] == M.bytes(TSCR_ADDR-1, 1)
     assert [251] == M.bytes(TSCR_ADDR+osize, 1)
     assert R(x=xpreserved) == M.regs
