@@ -288,25 +288,32 @@ bi_x10:    ldy buf0len
 
 ;   Read the ASCII decimal representation of a positive or negative integer
 ;   and convert it to a non-normalized (i.e., may have leading sign bytes
-;   as the MSBs) bigint. Leading zeros are converted. All characters must
-;   be ASCII decimal digits (and there must be at least one); the sign is
-;   specified separately. No error checking of input characters is done;
-;   bad input produces an undefined result.
+;   as the MSBs) bigint. Leading zeros are processed (though obviously with
+;   no effect other than slowing the conversion).
 ;
-;   The output buffer must be at least 2 bytes in length and large enough
-;   to hold the output. A reasonable heuristic for the size is half the
-;   number of digits in the input, rounded up; in the worst case this will
+;   No error checking is done; ouput/beahviour is undefined unless the
+;   following requirements are met.
+;   • 1 <= length(input) <= 255
+;   • All input characters are ASCII digits
+;   • sign = $00 or $FF
+;   • Output and scratch buffers are large enough to hold the output.
+;     (They need not be large enough to hold a valid sign; the sign
+;     is always what is specified as the sign input.
+;
+;   A reasonable heuristic for the scratch/output buffer sizes is half the
+;   number of digits in the input, rounded up. In the worst case this will
 ;   be about 20% larger than necessary, but for up to 22 digit inputs the
 ;   worst case is only two bytes larger.
 ;
-;         A, Y: (d)
-;            X: (p)
-;     buf0ptr₁: (pw) output buffer address - 1; preload with $00, len as above
-;     buf0len : (p)  output buffer length; see conditions above
 ;     buf1ptr₀: (pp) input chars buffer address
 ;     buf1len : (p)  input buffer length: 1 <= buf1len <= 255
-;     bufSptr₁: (pd) scratch buffer address - 1; len as above
+;         sign: (p)
+;     buf0ptr₁: (pw) pointer to output buffer address - 1; length as above
+;     buf0len : (p)  output buffer length; see conditions above
+;     bufSptr₁: (pd) scratch buffer address - 1; length same as buf0ptr₀
 ;    curdigit : (d)  temporary storage
+;         A, Y: (d)
+;            X: (p)
 ;
 bi_read_decdigits:
             ;   Set output buffer to starting value of zero.
