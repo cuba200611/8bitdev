@@ -240,13 +240,13 @@ bi_readhex: ldx #0              ; constant for indirect addressing
 ;   end. It's not clear if detection and setting of that should be done by
 ;   this routine or by the caller.
 ;
-;   This takes a bit under 100 cycles per byte, with around 20 bytes of
-;   constant overhead. A full 256 byte input takes 24746 cycles. The
-;   majority of this, sadly, is the LDA/STA because ROL has no indirect
-;   indexed addressing mode. This could be worked around with
-;   self-modifying code, but currently it's not worth the effort.
+;   This takes about 96 cycles per byte, with 6-12 cycles of overhead. A
+;   full 256 byte input takes 24741 cycles. The majority of this, sadly, is
+;   the LDA/STA because ROL has no indirect indexed addressing mode. This
+;   could be worked around with self-modifying code, but currently it's not
+;   worth the effort.
 ;
-bi_x10:    ldy buf0len
+bi_x10:     ldy *buf0len
             ;   Multiply the buffer by 2
             clc
 2$:         lda [buf0ptr],y
@@ -255,13 +255,13 @@ bi_x10:    ldy buf0len
             dey
             bne 2$
             ;   Make a copy of the ×2 value for later addition
-            ldy buf0len
+            ldy *buf0len
 3$:         lda [buf0ptr],y
             sta [bufSptr],y
             dey
             bne 3$
             ;   Multiply buffer by 2 again, for ×4
-            ldy buf0len
+            ldy *buf0len
             clc
 4$:         lda [buf0ptr],y
             rol
@@ -269,7 +269,7 @@ bi_x10:    ldy buf0len
             dey
             bne 4$
             ;   Multiply buffer by 2 again, for ×8
-            ldy buf0len
+            ldy *buf0len
             clc
 8$:         lda [buf0ptr],y
             rol
@@ -277,7 +277,7 @@ bi_x10:    ldy buf0len
             dey
             bne 8$
             ;   Add the ×2 value, for ×10
-            ldy buf0len
+            ldy *buf0len
             clc
 10$:        lda [bufSptr],y
             adc [buf0ptr],y
