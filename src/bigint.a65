@@ -1,4 +1,6 @@
-;   "bigint": variable precision integers
+;   bigint: variable precision integers
+
+;---------------------------------------------------------------------
 
 ;   Parameters specified in the documentation for each function are
 ;   annotated as follows.
