@@ -175,7 +175,9 @@ def test_bi_x10(M, signed, value):
 @pytest.mark.parametrize('sign, input, buf', [
     ( 0, b'0',      [0x00]),
     ( 0, b'255',    [0xFF]),
+    (-1, b'1',      [0xFF]),
     (-1, b'128',    [0x80]),
+    (-1, b'129',    [0x7F]),
 
     ( 0, b'0',      [0x00, 0x00]),
     ( 0, b'0',      [0x00, 0x00]),

@@ -347,12 +347,13 @@ bi_read_decdigits:
             sec
             sbc *temp1          ; calculate new LSB
             sta [buf0ptr],y     ;   and store it
-            dey
-62$:        lda [buf0ptr],y     ; propagate carry
+62$:        dey                 ; propagation done?
+            beq 70$             ; yes, move on to next digit
+            lda [buf0ptr],y     ; propagate carry
             sbc #0
             sta [buf0ptr],y
-            dey
-            bne 62$             ; not done; continue propagation
+            clv
+            bvc 62$             ; BRA; continue propagation
 
 70$:        ;   Propagation complete; on to next digit
             lda *curdigit       ; digits remaining
