@@ -173,6 +173,10 @@ def test_bi_x10(M, signed, value):
     #assert not M.mpu.processorCycles
 
 @pytest.mark.parametrize('sign, input, buf', [
+    ( 0, b'0',      [0x00]),
+    ( 0, b'255',    [0xFF]),
+    (-1, b'128',    [0x80]),
+
     ( 0, b'0',      [0x00, 0x00]),
     ( 0, b'0',      [0x00, 0x00]),
     (-1, b'0',      [0x00, 0x00]),
