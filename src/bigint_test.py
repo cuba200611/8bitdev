@@ -283,6 +283,12 @@ def test_bi_read_decdigits_max(M, sign):
     (b'+0',             [0x00]),
     (b'-0',             [0x00]),
 
+    #   Single digits
+    (b'1',              [0x01]),
+    (b'-1',             [0xFF]),
+    (b'9',              [0x09]),
+    (b'-9',             [0xF7]),
+
     #   Stripping of leading zeros
     (b'0000',           [      0x00]),
     (b'+0001',          [      0x01]),
