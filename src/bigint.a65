@@ -18,14 +18,19 @@
 
 ;---------------------------------------------------------------------
 
-;   Bigints are stored in big-endian format on 6502: a length byte
-;   followed by the integer in two's complement format.
+;   Bigints are stored as a length byte (≥1) followed by the two's
+;   complement binary integer. On the 6502 the value is big-endian format.
+;   The values are normalized: they take up no more bytes than necessary to
+;   express the number with the high bit of the MSB clear/set for
+;   positive/negative numbers. The MSB is a sign extension byte of $00
+;   (positive) or $FF (negative) only if the high bit of the next byte
+;   indicates the wrong sign.
 ;
-;   We use big-endian format, despite being the opposite of native
-;   6502 order, because we generally want to loop from the LSB to the
-;   MSB and looping towards zero saves means we can start with the
-;   length and decrement and compare with zero, saving the CMP we'd
-;   need to do if counting up to the length.
+;   We use big-endian format, despite being the opposite of native 6502
+;   order, because we generally want to loop from the LSB to the MSB and
+;   looping towards zero lets us use the zero compare inherent in the DEY
+;   instruction rather than having to do a separate CMP against a value
+;   stored elsewhere.
 
 ;---------------------------------------------------------------------
             .radix h
@@ -234,11 +239,14 @@ bi_readhex: ldx #0              ; constant for indirect addressing
 ;      buf0ptr₁: (pw) pointer to input/output buffer address - 1
 ;      bufSptr₁: (pd) pointer to scratch buffer address - 1
 ;
-;   XXX This is often called with small numbers with lots of leading zero
-;   bytes. Thus, it might be a significant optimization to work on only the
-;   right-hand portion of the buffer from the rightmost zero byte to the
-;   end. It's not clear if detection and setting of that should be done by
-;   this routine or by the caller.
+;   XXX This is often called with small numbers with lots of leading
+;   zero bytes. Thus, it might be a significant optimization for
+;   positive numbers to work on only the right-hand portion of the
+;   buffer from the rightmost zero byte to the end. But for negative
+;   numbers to use the same technique they would need to be filled
+;   with $FF sign extension bytes or something like that. It's not
+;   clear if detection and setting of that should be done by this
+;   routine or by the caller.
 ;
 ;   This takes about 96 cycles per byte, with 6-12 cycles of overhead. A
 ;   full 256 byte input takes 24741 cycles. The majority of this, sadly, is
