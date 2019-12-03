@@ -253,15 +253,36 @@ def test_bi_read_decdigits_max(M, sign):
     #assert not M.mpu.processorCycles
 
 @pytest.mark.parametrize('input, bytes', [
+    #   Zero uses special-case code
     (b'0',              [0x00]),
     (b'+0',             [0x00]),
     (b'-0',             [0x00]),
-    (b'0000',           [0x00]),
-    (b'+0001',          [0x01]),
-    (b'12345678',       [0x00, 0xbc, 0x61, 0x4e]),
-    (b'-00001',         [0xFF]),
-    (b'-1234567',       [      0xed, 0x29, 0x79]),
-    (b'-12345678',      [0xff, 0x43, 0x9e, 0xb2]),
+
+    #   Stripping of leading zeros
+    (b'0000',           [      0x00]),
+    (b'+0001',          [      0x01]),
+    (b'-0001',          [      0xFF]),
+    (b'0000234',        [0x00, 0xEA]),
+    (b'+000000234',     [0x00, 0xEA]),
+    (b'-00000000234',   [0xFF, 0x16]),
+    (b'-00000000345',   [0xFE, 0xA7]),
+
+    #   Edge cases for sign extension
+    (b'127',            [            0x7F]),
+    (b'128',            [      0x00, 0x80]),
+    (b'32767',          [      0x7F, 0xFF]),
+    (b'32768',          [0x00, 0x80, 0x00]),
+    (b'-128',           [            0x80]),
+    (b'-129',           [      0xFF, 0x7F]),
+    (b'-32768',         [      0x80, 0x00]),
+    (b'-32769',         [0xFF, 0x7F, 0xFF]),
+
+    #   Some biggish numbers
+    (b'12345678',                   [0x00, 0xBC, 0x61, 0x4E]),
+    (b'-1234567',                   [      0xED, 0x29, 0x79]),
+    (b'-12345678',                  [0xFF, 0x43, 0x9E, 0xB2]),
+    (b'999999999999',   [0x00, 0xE8, 0xD4, 0xA5, 0x0F, 0xFF]),
+    (b'-999999999999',  [0XFF, 0X17, 0X2B, 0X5A, 0XF0, 0X01]),
 ])
 def test_bi_read_dec(M, input, bytes):
     print('bi_read_dec:', input, bytes)

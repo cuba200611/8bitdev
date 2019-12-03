@@ -234,10 +234,16 @@ bi_readhex: ldx #0              ; constant for indirect addressing
 ;      buf0ptr₁: (pw) pointer to input/output buffer address - 1
 ;      bufSptr₁: (pd) pointer to scratch buffer address - 1
 ;
-;   This takes a bit under 100 cycles per byte, with around 20 bytes
-;   of constant overhead. A full 256 byte input takes 24746 cycles.
-;   The majority of this, sadly, is the LDA/STA because ROL has no
-;   indirect indexed addressing mode. This could be worked around with
+;   XXX This is often called with small numbers with lots of leading zero
+;   bytes. Thus, it might be a significant optimization to work on only the
+;   right-hand portion of the buffer from the rightmost zero byte to the
+;   end. It's not clear if detection and setting of that should be done by
+;   this routine or by the caller.
+;
+;   This takes a bit under 100 cycles per byte, with around 20 bytes of
+;   constant overhead. A full 256 byte input takes 24746 cycles. The
+;   majority of this, sadly, is the LDA/STA because ROL has no indirect
+;   indexed addressing mode. This could be worked around with
 ;   self-modifying code, but currently it's not worth the effort.
 ;
 bi_x10:    ldy buf0len
@@ -382,11 +388,11 @@ curdigit:   .ds 1               ; temporary storage
 bi_read_dec:
             ldx #0              ; constant for indirect addressing, etc.
             ;   Check for and process a `+` or `-` prefix
-            stx *sign            ; assume positive
+            stx *sign           ; assume positive
             lda [buf1ptr,x]
             cmp #'-
             bne 110$            ; no, doesn't start with `-` sign
-            dec *sign            ; change sign to negative
+            dec *sign           ; change sign to negative
             bmi 150$            ; always branch to remove sign char
 110$:       cmp #'+
             bne 200$            ; skip sign char removal
