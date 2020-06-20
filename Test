@@ -265,9 +265,6 @@ astest  src/mc68/cpxtest.a68
 ####################################################################
 #   Tests
 
-bin/jr200-tape-dump
-exit 99
-
 export PYTHONPATH="$basedir/lib"
 #   XXX This probably relies on the cwd to find the pytest.ini.
 pytest -q "$@"
