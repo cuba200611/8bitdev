@@ -70,14 +70,15 @@ def samples_to_levels( samples ):
 # - pulse length - length of the pulse up to this point
 def levels_to_timed_edges( levels, sample_dur ):
     edges = []
-    last_t = 0.0
-    last_level = levels[ 0 ]
-    for (i, l) in enumerate( levels ):
-        t = sample_dur * i
-        if ( l != last_level ):
-            edges.append( (t, l, t - last_t) )
-            last_t = t
-            last_level = l
+    if len( levels ) > 0:
+        last_t = 0.0
+        last_level = levels[ 0 ]
+        for (i, l) in enumerate( levels ):
+            t = sample_dur * i
+            if ( l != last_level ):
+                edges.append( (t, l, t - last_t) )
+                last_t = t
+                last_level = l
     return tuple( edges )
 
 # edges         : ( ( float, bool, float ), )
@@ -88,17 +89,18 @@ def levels_to_timed_edges( levels, sample_dur ):
 def next_space( edges, i_next, edges_needed ):
     consecutive = 0
     i = i_next
-    dur = 1000000 * edges[ i ][ 2 ]
     while i < len( edges ):
+        dur = 1000000 * edges[ i ][ 2 ]
         if dur >= 300 and dur <= 500:
             consecutive += 1
-            if consecutive > edges_needed:
+            if consecutive >= edges_needed:
                 # FIXME: below is hack to get some troublesome audio to  work
                 # shoud split functionality into 'next_space' and 'read_leader'
                 #return i - consecutive
                 return i
+        else:
+            consecutive = 0
         i += 1
-        dur = 1000000 * edges[ i ][ 2 ]
     raise( Exception( 'unable to find %d consecutive edges of space'
                         % edges_needed))
 
