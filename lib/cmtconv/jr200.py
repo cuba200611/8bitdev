@@ -194,7 +194,7 @@ class decoder( object ):
         if( bits == ( 1, ) ):
             return i_next
         else:
-            raise( Exception( 'Expected start bits: [ 1 ], got: %s '
+            raise( Exception( 'Expected start bits: ( 1, ), got: %s '
                 % str( bits ) ) )
 
     # edges     : ( ( float, bool, float ), )
@@ -207,7 +207,7 @@ class decoder( object ):
         if( bits == ( 0, 0, 0 ) ):
             return i_next
         else:
-            raise( Exception( 'Expected stop bits [ 0, 0, 0 ], got: %s '
+            raise( Exception( 'Expected stop bits ( 0, 0, 0 ), got: %s '
                             % str( bits ) ) )
 
     # We use the definition of mark/1 and space/0 as per the service manual,
