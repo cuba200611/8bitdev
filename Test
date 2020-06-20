@@ -199,6 +199,9 @@ a2exebuild  exe/a2/charset.a65
 ####################################################################
 #   Tests
 
+bin/jr200-tape-dump
+exit 99
+
 export PYTHONPATH="$basedir/lib"
 #   XXX This probably relies on the cwd to find the pytest.ini.
 pytest -q "$@"

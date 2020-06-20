@@ -3,12 +3,20 @@
     Dump binary data from National JR-200 tape output.
 '''
 
-from __future__ import print_function
-import sys
+from    __future__ import print_function
+from    os.path  import abspath, dirname, join
+import  sys
+from    site  import addsitedir
+
+from cmtconv.jr200 import \
+    info, debug, err, samples_to_levels, levels_to_timed_edges, file_reader, \
+    checksums_valid, blocks_to_bytes
+
 from pydub import AudioSegment
-from jr200_tape import info, debug, err, samples_to_levels
-from jr200_tape import levels_to_timed_edges, file_reader
-from jr200_tape import checksums_valid, blocks_to_bytes
+
+
+BASEDIR = dirname(dirname(abspath(__file__)))
+addsitedir(join(BASEDIR, 'lib'))
 
 if len( sys.argv ) < 3:
     err('Dumps binary data from JR-200 cassette output\n' +
