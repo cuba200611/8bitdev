@@ -267,14 +267,14 @@ class file_header( object ):
     def __str__( self ):
         s = ''
         s += 'JR-200 File header block\n'
-        s += 'Header: {}\n'.format( map( hex, self.header ) )
+        s += 'Header: {}\n'.format( tuple( hex( x ) for x in self.header ) )
         s += 'Block: {}\n'.format( self.block_number )
         s += 'Length: {}\n'.format( self.length )
-        s += 'Pad0: {}\n'.format( map( hex, self.pad0 ) )
+        s += 'Pad0: {}\n'.format( tuple( hex( x  ) for x in  self.pad0 ) )
         s += 'Filename: "{}"\n'.format( self.filename )
         s += 'File type: {}\n'.format( hex( self.filetype ) )
         s += 'Baud rate: {}\n'.format( hex( self.baud_rate ) )
-        s += 'Pad1: {}\n'.format( map( hex, self.pad1 ) )
+        s += 'Pad1: {}\n'.format( tuple( hex( x ) for x in self.pad1 ) )
         s += 'Checksum: {} (calculated: {})\n'.format(
                 hex( self.checksum ), hex( sum( self.raw_bytes[:-1] ) % 256 ) )
         return s
@@ -298,7 +298,7 @@ class block_header( object ):
     def __str__( self ):
         s = ''
         s += 'JR-200 Data block header\n'
-        s += 'Header: {}\n'.format( map( hex, self.header ) )
+        s += 'Header: {}\n'.format( tuple( hex( x ) for x in self.header ) )
         s += 'Block: {}\n'.format( self.block_number )
         s += 'Length: {}\n'.format( self.length )
         s += 'Address: {}\n'.format( self.addr )
