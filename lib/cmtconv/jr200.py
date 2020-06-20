@@ -49,11 +49,15 @@ def debug( *args, **kwargs ):
 # ->
 # levels    : [ Bool ]
 def samples_to_levels( samples ):
-    sample_max = max( samples )
-    sample_min = min( samples )
-    cutoff = sample_min + 0.45 * (sample_max - sample_min)
-    debug( 'Max: %d, min: %d, cutoff: %d' % ( sample_max, sample_min, cutoff) )
-    return [ x > cutoff for x in samples ]
+    if len( samples ) > 0:
+        sample_max = max( samples )
+        sample_min = min( samples )
+        cutoff = sample_min + 0.45 * (sample_max - sample_min)
+        debug( 'Max: %d, min: %d, cutoff: %d' %
+                ( sample_max, sample_min, cutoff) )
+        return [ x > cutoff for x in samples ]
+    else:
+        return []
 
 # levels        : [ Bool ]
 # sample_dur    : Float
