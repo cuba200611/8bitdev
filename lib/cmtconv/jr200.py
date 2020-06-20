@@ -45,9 +45,9 @@ def info( *args, **kwargs ):
 def debug( *args, **kwargs ):
     print( *args, file = sys.stderr, **kwargs )
 
-# samples   : [ Float ]
+# samples   : [ float ]
 # ->
-# levels    : [ Bool ]
+# levels    : ( bool, )
 def samples_to_levels( samples ):
     if len( samples ) > 0:
         sample_max = max( samples )
@@ -55,14 +55,14 @@ def samples_to_levels( samples ):
         cutoff = sample_min + 0.45 * (sample_max - sample_min)
         debug( 'Max: %d, min: %d, cutoff: %d' %
                 ( sample_max, sample_min, cutoff) )
-        return [ x > cutoff for x in samples ]
+        return tuple( x > cutoff for x in samples )
     else:
-        return []
+        return ()
 
-# levels        : [ Bool ]
-# sample_dur    : Float
+# levels        : ( bool, )
+# sample_dur    : float
 # ->
-# edges         : [ ( Float, Bool, Float ) ]
+# edges         : ( ( float, bool, float ), )
 #
 # The edges returned are a triple of:
 # - time
@@ -78,13 +78,13 @@ def levels_to_timed_edges( levels, sample_dur ):
             edges.append( (t, l, t - last_t) )
             last_t = t
             last_level = l
-    return edges
+    return tuple( edges )
 
-# edges         : [ ( Float, Bool, Float ) ]
-# i_next        : Int
-# edges_needed  : Int
+# edges         : ( ( float, bool, float ), )
+# i_next        : int
+# edges_needed  : int
 # ->
-# i_next        : Int
+# i_next        : int
 def next_space( edges, i_next, edges_needed ):
     consecutive = 0
     i = i_next
@@ -102,9 +102,9 @@ def next_space( edges, i_next, edges_needed ):
     raise( Exception( 'unable to find %d consecutive edges of space'
                         % edges_needed))
 
-# edge      : [ ( Float, Bool, Float ) ]
+# edge      : ( ( float, bool, float ), )
 # ->
-# result    : Bool
+# result    : bool
 #
 # FIXME: in-band error handling
 # FIXME: tolerance argument(s)
@@ -121,10 +121,10 @@ def is_mark( edge ):
                         % ( dur, edge[ 0 ] ) ) )
 
 
-# edges         : [ ( Float, Bool, Float ) ]
-# i_next        : Int
+# edges         : ( ( float, bool, float ), )
+# i_next        : int
 # ->
-# i_next        : Int
+# i_next        : int
 def eat_until_mark( edges, i_next ):
     i = i_next
     edge = edges[ i ]
@@ -138,16 +138,16 @@ def eat_until_mark( edges, i_next ):
 #  (i.e. 2400Hz/1200Hz waves)
 class decoder( object ):
 
-    # mark_edges    : Int -- number of 2400Hz edges for a mark or '1'
-    # space_edges   : Int -- number of 1200Hz edges for a space or '0'
+    # mark_edges    : int -- number of 2400Hz edges for a mark or '1'
+    # space_edges   : int -- number of 1200Hz edges for a space or '0'
     def __init__( self, mark_edges, space_edges ):
         self.mark_edges     = mark_edges
         self.space_edges    = space_edges
 
-    # edges     : [ ( Float, Bool, Float ) ]
-    # idx       : Int
+    # edges     : ( ( float, bool, float ), )
+    # idx       : int
     # ->
-    # ( i_next, bit )   : ( Int, Int )
+    # ( i_next, bit )   : ( int, int )
     def eat_bit( self, edges, idx ):
         e = edges[ idx ]
         if is_mark( e ):
@@ -167,42 +167,42 @@ class decoder( object ):
                         % ( self.space_edges, dur, e[ 0 ] ) ) )
             return ( idx + self.space_edges, 0 )
 
-    # edges     : [ ( Float, Bool, Float ) ]
-    # idx       : Int
-    # n         : Int
+    # edges     : ( ( float, bool, float ), )
+    # idx       : int
+    # n         : int
     # ->
-    # ( i_next, bits )   : ( Int, [ Int ] )
+    # ( i_next, bits )   : ( int, ( int, ) )
     def eat_bits( self, edges, idx, n ):
         bits = []
         i_next = idx
         for _ in range( n ):
             ( i_next, bit ) = self.eat_bit( edges, i_next )
             bits.append( bit )
-        return ( i_next, bits )
+        return ( i_next, tuple( bits ) )
 
     # Bit pattern for a byte is 1 xxxx xxxx 000
 
-    # edges     : [ ( Float, Bool, Float ) ]
-    # i_next    : Int
+    # edges     : ( ( float, bool, float ), )
+    # i_next    : int
     # ->
-    # i_next    : Int
+    # i_next    : int
     def eat_start_bits( self, edges, i_next ):
         ( i_next, bits ) = self.eat_bits( edges, i_next, 1 )
         #debug( bits )
-        if( bits == [ 1 ] ):
+        if( bits == ( 1, ) ):
             return i_next
         else:
             raise( Exception( 'Expected start bits: [ 1 ], got: %s '
                 % str( bits ) ) )
 
-    # edges     : [ ( Float, Bool, Float ) ]
-    # i_next    : Int
+    # edges     : ( ( float, bool, float ), )
+    # i_next    : int
     # ->
-    # i_next    : Int
+    # i_next    : int
     def eat_stop_bits( self, edges, i_next ):
         ( i_next, bits ) = self.eat_bits( edges, i_next, 3 )
         #debug( bits )
-        if( bits == [ 0, 0, 0 ] ):
+        if( bits == ( 0, 0, 0 ) ):
             return i_next
         else:
             raise( Exception( 'Expected stop bits [ 0, 0, 0 ], got: %s '
@@ -212,24 +212,23 @@ class decoder( object ):
     # but the actual bits seem to be inverted. They are also little-endian,
     # with the LSB first.
     #
-    # edges     : [ ( Float, Bool, Float ) ]
-    # i_nexy    : Int
+    # edges     : ( ( float, bool, float ), )
+    # i_nexy    : int
     # ->
-    # ( i_next, res ) : ( Int, Int )
+    # ( i_next, res ) : ( int, int )
     def eat_raw_byte( self, edges, i_next ):
         ( i_next, bits ) = self.eat_bits( edges, i_next, 8 )
         # debug( bits )
         res = 0
-        bits.reverse()
-        for b in bits:
+        for b in reversed( bits ):
             res = 2 * res + ( 1 - b )
         return ( i_next, res )
 
-    # edges     : [ ( Float, Bool, Float ) ]
-    # i_next    : Int
-    # n         : Int
+    # edges     : ( ( float, bool, float ), )
+    # i_next    : int
+    # n         : int
     # ->
-    # ( i_next, res ) : ( Int, [ Int ] )
+    # ( i_next, res ) : ( int, ( int, ) )
     def eat_bytes( self, edges, i_next, n ):
         res = []
         for _ in range( n ):
@@ -237,7 +236,7 @@ class decoder( object ):
             ( i_next, x ) = self.eat_raw_byte( edges, i_next )
             i_next = self.eat_stop_bits( edges, i_next )
             res.append( x )
-        return ( i_next, res )
+        return ( i_next, tuple( res ) )
 
 
 class file_header( object ):
@@ -292,7 +291,7 @@ class block_header( object ):
         self.block_number   = b[ 2 ]
         self.length         = b[ 3 ]
         self.addr           = b[4] * 256 + b[5]
-        if self.header != [ 2, 42 ]:
+        if self.header != ( 2, 42 ):
             raise ( Exception( 'Invalid signature in header: {}'.format(
                                 self.header ) ) )
 
@@ -389,7 +388,7 @@ class file_reader( object ):
             ( i_next, block_data_bytes ) = bit_decoder.eat_bytes(
                                              edges, i_next, actual_length + 1 )
             block_data_chksum = block_data_bytes[-1]
-            block_data_bytes.pop()
+            block_data_bytes = block_data_bytes[:-1]
 
             blk = block( block_hdr, block_data_bytes, block_data_chksum )
             # debug( blk )
@@ -397,7 +396,7 @@ class file_reader( object ):
             return ( i_next, blk )
 
     # read blocks
-    # returns ( int, [block] )
+    # returns ( int, ( block, ) )
     def read_blocks( self, bit_decoder, edges, i_next ):
         blocks = []
 
@@ -408,10 +407,10 @@ class file_reader( object ):
             if blk.header.is_tail():
                 break
 
-        return (i_next, blocks)
+        return (i_next, tuple( blocks ) )
 
     # read a file header and all blocks
-    # returns ( int, ( file_header, [ block ] ) )
+    # returns ( int, ( file_header, ( block, ) ) )
     def read_file( self, edges, i_next ):
         ( i_next, file_hdr ) = self.read_file_header( edges, i_next )
         if file_hdr.baud_rate == 0:
@@ -426,9 +425,9 @@ class file_reader( object ):
 
 # Check checksums are valid
 #
-# blocks : [ block ]
+# blocks : ( block, )
 # ->
-# Bool
+# bool
 def checksums_valid( blocks ):
     for block in blocks:
         chksum = block.calc_checksum()
@@ -440,7 +439,7 @@ def checksums_valid( blocks ):
 
 # Convert blocks to bytes
 #
-# blocks : [ block ]
+# blocks : ( block, )
 # ->
 # bytearray
 def blocks_to_bytes( blocks ):
