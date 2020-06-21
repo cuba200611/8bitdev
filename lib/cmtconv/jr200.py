@@ -3,6 +3,7 @@
 
 from __future__ import print_function
 import sys
+from collections import namedtuple
 
 # General approach is to use layered abstractions in
 # a simple top-down parser.
@@ -342,6 +343,7 @@ class block( object ):
                     % (header_chksum,data_chksum,chksum) )
             return chksum
 
+File = namedtuple( 'File', 'header blocks' )
 
 class file_reader( object ):
     def __init__( self ):
@@ -412,7 +414,7 @@ class file_reader( object ):
         return (i_next, tuple( blocks ) )
 
     # read a file header and all blocks
-    # returns ( int, ( file_header, ( block, ) ) )
+    # returns ( int, File )
     def read_file( self, edges, i_next ):
         ( i_next, file_hdr ) = self.read_file_header( edges, i_next )
         if file_hdr.baud_rate == 0:
@@ -420,9 +422,9 @@ class file_reader( object ):
         else:
             bit_decoder = self.baud600_decoder
         ( i_next, blocks ) = self.read_blocks( bit_decoder, edges, i_next )
-        return (i_next, ( file_hdr, blocks ) )
+        return (i_next, File( file_hdr, blocks ) )
 
-    # FIXME: read_files - return [ ( file_header, [block] ) ]
+    # FIXME: read_files - return ( File, )
 
 
 # Check checksums are valid

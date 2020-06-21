@@ -53,10 +53,10 @@ info( 'Max cycle length: %f' % max( cycle_lengths ) )
 # plt.show()
 
 freader = file_reader()
-( i_next, ( file_hdr, blocks ) ) = freader.read_file( edges, 0 )
+( i_next, f ) = freader.read_file( edges, 0 )
 
-if checksums_valid( blocks ):
-    data = blocks_to_bytes( blocks )
+if checksums_valid( f.blocks ):
+    data = blocks_to_bytes( f.blocks )
     info( 'Ouput file: %s' % outfile )
     f = open( outfile, 'w+b' )
     f.write( data )
