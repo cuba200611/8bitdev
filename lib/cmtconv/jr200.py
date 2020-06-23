@@ -4,6 +4,7 @@
 from __future__ import print_function
 import sys
 from collections import namedtuple
+from enum import Enum
 
 # General approach is to use layered abstractions in
 # a simple top-down parser.
@@ -33,6 +34,9 @@ from collections import namedtuple
 # Add pytest tests
 # Documentation
 #
+
+class NotImplementedError(Exception):
+    ''' Not Implemented ''' # FIXME: remove when done
 
 def err( *args, **kwargs ):
     print( *args, file = sys.stderr, **kwargs )
@@ -257,14 +261,14 @@ class file_header( object ):
     def __init__( self, raw_bytes ):
         b = raw_bytes
         self.raw_bytes      = b
-        self.header         = b[ 0:2 ]
+        self.header         = ( b[0], b[1] )
         self.block_number   = b[ 2 ]
         self.length         = b[ 3 ]
-        self.pad0           = b[ 4:6 ]
+        self.pad0           = ( b[4], b[5] )
         self.filename       = ''.join( chr( x ) for x in b[ 6:22 ] if x > 0 )
         self.filetype       = b[ 22 ]
         self.baud_rate      = b[ 23 ]
-        self.pad1           = b[ 24:31 ]
+        self.pad1           = tuple( b[ 24:31 ] )
         self.checksum       = b[ 32 ]
 
     def __str__( self ):
@@ -290,7 +294,7 @@ class block_header( object ):
     def __init__( self, raw_bytes ):
         b = raw_bytes
         self.raw_bytes      = b
-        self.header         = b[ 0:2 ]
+        self.header         = ( b[0], b[1] )
         self.block_number   = b[ 2 ]
         self.length         = b[ 3 ]
         self.addr           = b[4] * 256 + b[5]
@@ -441,6 +445,7 @@ def checksums_valid( blocks ):
             return False
     return True
 
+
 # Convert blocks to bytes
 #
 # blocks : ( block, )
@@ -452,3 +457,209 @@ def blocks_to_bytes( blocks ):
         res.extend( block.data )
     return res
 
+
+# Convert bytes to a file
+#
+# filename  : str
+# data      : bytearray
+# addr      : int
+# baud      : int
+# filetype  : int
+# ->
+# File
+def bytes_to_file(filename, data, addr, baud, filetype):
+    raise NotImplementedError
+
+
+# Convert a 'cjr' file to a file header and blocks
+#
+# bytes : bytearray
+# ->
+# File
+def cjr_to_file(bytes):
+    file_hdr = file_header(bytes[0:33])
+    debug(file_hdr)
+    blocks = []
+    i = 33
+    while True:
+        data = bytes[i:i+6]
+        debug('Header raw data: {}'.format(tuple(data)))
+        block_hdr = block_header(bytes[i:i+6])
+        debug(block_hdr)
+        if block_hdr.is_tail():
+            blk = block(block_hdr, (), 0)
+            blocks.append(blk)
+            break
+        else:
+            i += 6
+            l = block_hdr.length
+            if l == 0:
+                l = 256 # FIXME: push into class
+            block_bytes = bytes[i:i + l]
+            i += l
+            checksum = bytes[i]
+            i += 1
+            blk = block(block_hdr, block_bytes, checksum)
+            blocks.append(blk)
+    return File(file_hdr, tuple(blocks))
+
+
+# Convert a file to a cjr format
+#
+# f : File
+# ->
+# bytes : bytearray
+def file_to_cjr(f):
+    ( file_hdr, blocks ) = f
+    res = bytearray()
+    res.extend( file_hdr.raw_bytes )
+    for blk in blocks:
+        res.extend( blk.header.raw_bytes )
+        if not blk.header.is_tail():
+            res.extend( blk.data )
+            res.append( blk.checksum )
+    return res
+
+
+# encoder class
+class encoder(object):
+    # mark_edges    : Int -- number of 2400Hz edges for a mark or '1'
+    # space_edges   : Int -- number of 1200Hz edges for a space or '0'
+    def __init__(self, mark_edges, space_edges):
+        self.mark_edges     = mark_edges
+        self.space_edges    = space_edges
+    
+    # bit
+    def encode_bit(self, bit):
+        # FIXME: push into init
+        res = []
+        if bit:
+            for _ in range(self.mark_edges):
+                res.append(0.5 / 2400.0)
+        else:
+            for _ in range(self.space_edges):
+                res.append(0.5 / 1200.0)
+        return res
+
+    # byte
+    def encode_byte(self, b):
+        mark  = self.encode_bit(1) # FIXME: push into init
+        space = self.encode_bit(0)
+        res = []
+        # Start bit
+        res.extend(mark)
+        #debug( hex( b ) )
+        for _ in range(8):
+            #debug( '{0:b}'.format( b ) )
+            if b & 1:
+                res.extend(space)
+            else:
+                res.extend(mark)
+            b >>= 1
+        # Stop bits
+        res.extend(space)
+        res.extend(space)
+        res.extend(space)
+        return res
+
+    # bytes
+    def encode_bytes(self, bytes):
+        res = []
+        for b in bytes:
+            res.extend(self.encode_byte(b))
+        return res
+
+
+class AudioMarker( Enum ):
+    SILENCE = 1
+    SOUND   = 2
+
+def silence( dur ):
+    return (AudioMarker.SILENCE, dur)
+
+def sound( edges ):
+    return (AudioMarker.SOUND, edges)
+
+
+class file_encoder(object):
+    def __init__(self ):
+        self.baud600_encoder    = encoder(8, 4)
+        self.baud2400_encoder   = encoder(2, 1)
+
+    def leader(self, n):
+        return [0.5 / 1200.0] * n
+
+    def header(self, file_hdr):
+        # silence, leader, header
+        #leader_edges = self.leader(3200) # According to web docs
+        #leader_edges = self.leader(2400) # Measured from actual recording
+        leader_edges = self.leader(1600) # Shorter leader works OK
+        debug(' '.join(hex(x) for x in file_hdr.raw_bytes))
+        header_edges = self.baud600_encoder.encode_bytes(file_hdr.raw_bytes)
+        return (silence(1.0), sound(leader_edges + header_edges))
+
+    def block(self, encoder, blk):
+        # silence, leader, header, data
+        leader_edges = self.leader(200) # measured from actual recording
+        if blk.header.is_tail():
+            data = blk.header.raw_bytes
+        if not blk.header.is_tail():
+            data = blk.header.raw_bytes + blk.data + bytearray((blk.checksum,))
+        debug(len(data))
+        debug(' '.join(hex(x) for x in data))
+        data_edges = encoder.encode_bytes(data)
+        return (sound(leader_edges + data_edges ), )
+
+    def blocks(self, encoder, blocks):
+        edges = ()
+        for blk in blocks:
+            edges += self.block(encoder, blk)
+        return edges
+
+    def encode_file(self, f):
+        if f.header.baud_rate == 0:
+            encoder = self.baud2400_encoder
+        elif f.header.baud_rate == 1:
+            encoder = self.baud600_encoder
+        else:
+            raise Exception('Unsupported baud setting: %d'
+                                % f.header.baud_rate)
+        return self.header(f.header) + self.blocks(encoder, f.blocks)
+
+
+# Convert edges to samples
+#
+# edges     : tuple of (SILENCE, duration) or (SOUND, edges)
+# dur       : float
+# silence   : float
+# low       : float
+# high      : float
+# ->
+# samples   : tuple( float )
+def edges_to_samples(edges, sample_dur, silence, low, high):
+    res = []
+    lvl = True
+    for chunk in edges:
+        if chunk[0] == AudioMarker.SILENCE:
+            dur = chunk[1]
+            res.extend(silence for _ in range(int(dur/sample_dur)))
+            lvl = True
+        elif chunk[0] == AudioMarker.SOUND:
+            edges_ = chunk[1]
+            for dur in edges_:
+                sample_lvl = high if lvl else low
+                res.extend(sample_lvl for _ in range(int(dur/sample_dur)))
+                lvl = not lvl
+        else:
+            raise Exception( 'Unknown audio marker' )
+    return res
+
+
+# Convert file to samples
+#
+# f     : File
+# rate  : double
+# ->
+# ( double, )
+def file_to_samples(f, rate):
+    raise NotImplementedError
