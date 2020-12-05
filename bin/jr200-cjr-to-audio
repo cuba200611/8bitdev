@@ -20,7 +20,7 @@ from cmtconv.jr200 import \
 if len(sys.argv) < 3:
     err('Convert binary data to JR-200 tape output\n' +
         'Usage: %s data_file output_file' % sys.argv[0])
-    sys.exit( -1 )
+    sys.exit(-1)
 
 fname = sys.argv[1]
 outfile = sys.argv[2]
