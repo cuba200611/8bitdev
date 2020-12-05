@@ -651,7 +651,6 @@ class Encoder(object):
     def __init__(self, mark_edges, space_edges):
         self.mark_edges     = mark_edges
         self.space_edges    = space_edges
-
     # bit
     def encode_bit(self, bit):
         # FIXME: push into init
