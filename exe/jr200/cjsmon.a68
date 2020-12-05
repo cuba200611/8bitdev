@@ -1,0 +1,19 @@
+;   cjsmon for JR-200.
+
+            cpu 6800
+            include "src/mc68/std.a68"
+
+;   Place this 4K below the end of RAM, where it's unlikely
+;   to get stomped by small BASIC programs.
+;
+rdlinebuf       equ $180    ; 128 char input buffer
+rdlinebuf_end   equ $200
+
+            org $7000
+
+            include "src/jr200/bios.a68"
+
+            jmp init
+
+            include "src/mc68/cjsmon.a68"
+
