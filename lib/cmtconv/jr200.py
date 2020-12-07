@@ -404,7 +404,11 @@ class FileReader(object):
             block_data_chksum = block_data_bytes[-1]
             block_data_bytes = block_data_bytes[:-1]
 
-            blk = Block(block_hdr, block_data_bytes, block_data_chksum)
+            blk = Block(block_hdr, block_data_bytes)
+            if block_data_chksum != blk.checksum():
+                raise RuntimeError(
+                    'Block ${:02X} bad checksum ${:02X}, expected ${:02X}'
+                    .format(blk.header.blockno, checksum, blk.checksum()))
             # debug(blk)
             debug('i_next: %d( %f )' % (i_next, edges[i_next][0]))
             return (i_next, blk)
@@ -435,22 +439,6 @@ class FileReader(object):
         return (i_next, File(file_hdr, blocks))
 
     # FIXME: read_files - return ( File, )
-
-
-# Check checksums are valid
-#
-# blocks : ( block, )
-# ->
-# bool
-def checksums_valid(blocks):
-    for block in blocks:
-        chksum = block.calc_checksum()
-        if block.checksum != chksum:
-            err('Block %d has checksum %d, calculated checksum is %d'
-                % (block.header.blockno, block.checksum, chksum))
-            return False
-    return True
-
 
 # Convert blocks to bytes
 #
@@ -485,14 +473,13 @@ def bytes_to_file(filename, data, addr, filetype, baud):
         block_size = min(256, remaining)
         block_data = data[idx:idx + block_size]
         bh = BlockHeader.make(bn, block_size, a)
-        chksum = (sum(block_data) + bh.calc_checksum()) % 256
-        blocks.append(Block(bh, block_data, chksum))
+        blocks.append(Block(bh, block_data))
         idx += block_size
         a += block_size
         bn += 1
         remaining -= block_size
-    #blocks.append(Block(BlockHeader.make_tail(), tuple(), 0))
-    blocks.append(Block(BlockHeader.make(255, 255, a), (), 0))
+    #blocks.append(Block(BlockHeader.make_tail(), b''))
+    blocks.append(Block(BlockHeader.make(255, 255, a), b''))
     return File(file_header, tuple(blocks))
 
 # Convert a 'cjr' file to a file header and blocks
@@ -511,7 +498,7 @@ def cjr_to_file(bytes):
         block_hdr = BlockHeader.from_bytes(bytes[i:i+6])
         debug(block_hdr)
         if block_hdr.is_tail():
-            blk = Block(block_hdr, (), 0)
+            blk = Block(block_hdr, ())
             blocks.append(blk)
             break
         else:
@@ -523,7 +510,11 @@ def cjr_to_file(bytes):
             i += l
             checksum = bytes[i]
             i += 1
-            blk = Block(block_hdr, block_bytes, checksum)
+            blk = Block(block_hdr, block_bytes)
+            if checksum != blk.checksum():
+                raise RuntimeError(
+                    'Block ${:02X} bad checksum ${:02X}, expected ${:02X}'
+                    .format(blk.header.blockno, checksum, blk.checksum()))
             blocks.append(blk)
     return File(file_hdr, tuple(blocks))
 
@@ -628,7 +619,7 @@ class FileEncoder(object):
         if blk.header.is_tail():
             data = blk.header.to_bytes()
         if not blk.header.is_tail():
-            data = blk.header.to_bytes() + blk.data + bytearray((blk.checksum,))
+            data = blk.header.to_bytes() + blk.data + bytes((blk.checksum(),))
         debug(len(data))
         debug(' '.join(hex(x) for x in data))
         data_edges = encoder.encode_bytes(data)
