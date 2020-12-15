@@ -14,6 +14,27 @@ def loadbios(m, input=None, output=None):
     return m.setiostreams(S.charinport, input, output)
 
 ####################################################################
+#   q* - parsing
+
+@pytest.mark.parametrize('char', [ b'\t', b'\n', b'\r', b' ', ])
+def test_qwspace_true(m, S, R, char):
+    inbuf = set_rdlinebuf(m, char)
+    m.call(S.qwspace, R(a=0xFE, b=0xFD, x=0xFCFB))  # B preserved
+    assert (R(C=True, b=0xFD), inbuf+1) == (m.regs, m.word(S.cmdqptr))
+
+@pytest.mark.parametrize('char', [ b'\x01', b'\b', b'@', b'\xFF', ])
+def test_qwspace_false(m, S, R, char):
+    inbuf = set_rdlinebuf(m, char)
+    m.call(S.qwspace, R(a=0xFE, b=0xFD, x=0xFCFB))  # B preserved
+    assert (R(C=False, b=0xFD), inbuf) == (m.regs, m.word(S.cmdqptr))
+
+def test_qwspace_end(m, S, R):
+    ' End-of-input char $00 is whitespace but must not be consumed. '
+    inbuf = set_rdlinebuf(m, b'\x00')
+    m.call(S.qwspace)
+    assert (R(C=True), inbuf) == (m.regs, m.word(S.cmdqptr))
+
+####################################################################
 #   pr* - printing output
 
 @pytest.mark.parametrize('val, char', (
@@ -243,19 +264,28 @@ def test_examine(m, S, R, addr, width, cmdarg, lines, expmatch):
         ), 'consumed, lines, width, outlines'
     assert re.fullmatch(expmatch, output, re.DOTALL)
 
+def depregs(m, regs):
+    ' Deposit `regs` to the save registers area. '
+    S = m.symtab
+    m.depword(S.Rsp, regs.sp);  m.depword(S.Rpc, regs.pc)
+    m.deposit(S.Ra,  regs.a);   m.deposit(S.Rb,  regs.b)
+    m.depword(S.Rx,  regs.x);   m.deposit(S.Rcc, regs.cc)
+
+def examregs(m):
+    ' Return a Registers containing the in-memory register copies. '
+    S = m.symtab
+    return R(sp=m.word(S.Rsp), pc=m.word(S.Rpc), cc=m.byte(S.Rcc),
+             a=m.byte(S.Ra),    b=m.byte(S.Rb),   x=m.word(S.Rx),
+            )
+
 @pytest.mark.parametrize('regs', [
     R(pc=0x5678, a=0x9A, b=0xBC, x=0xDEF0, cc=0xFF, sp=0x1234),
     R(pc=0x0002, a=0x03, b=0x04, x=0x0005, cc=0x00, sp=0x0001),
 ])
 def test_show_registers(m, S, R, regs):
     print(regs)
-    m.depword(S.Rpc, regs.pc)
-    m.deposit(S.Ra,  regs.a)
-    m.deposit(S.Rb,  regs.b)
-    m.depword(S.Rx,  regs.x)
-    m.deposit(S.Rcc, regs.cc)
-    m.depword(S.Rsp, regs.sp)
-
+    depregs(m, regs)
+    inbuf = set_rdlinebuf(m)
     _, ostream = loadbios(m)
     m.call(S.regscmd)
     output = str(ostream.getvalue(), encoding='ASCII')
@@ -268,7 +298,31 @@ def test_show_registers(m, S, R, regs):
 
     expected = ' p{:04X} a{:02X} b{:02X} x{:04X} c{:02X} s{:04X}\n' \
         .format(regs.pc, regs.a, regs.b, regs.x, regs.cc, regs.sp)
-    assert expected == output
+    assert (inbuf, expected) == (m.word(S.cmdqptr), output)
+
+@pytest.mark.parametrize('cmdarg, consumed, changedregs', [
+    (b'pFEDC',  5,  R(pc=0xFEDC)),
+   #(b'aFF',        R(a=0xFF)),
+   #(b'bE0 ',       R(b=0xE0)),
+   #(b'x=7777',     R(x=0x7777)),
+   #(b'c31',        R(cc=0x31)),
+   #(b's123',       R(sp=0x123)),
+   #(b'a7b09',      R(a=0x07, b=0x09)),
+])
+def test_set_registers(m, S, R, cmdarg, consumed, changedregs):
+    initregs = R(pc=0x0102, a=0x03, b=0x04, x=0x0506, cc=0xFF, sp=0x0708)
+    depregs(m, initregs)
+    inbuf = set_rdlinebuf(m, cmdarg)
+    _, ostream = loadbios(m)
+
+    #m.call(S.regscmd, trace=1) # XXX can't because of PULling return addr
+    #   Becuase of the trick we use to drop the return address.
+    m.setregs(R(pc=S.regscmd))
+    exits = (S['regscmd.rts'], S['regscmd.argerr'])
+    m.stepto(stopat=exits, maxsteps=20000)
+
+    assert (initregs.clone(**changedregs.valued()), inbuf + consumed, b'') \
+        == (examregs(m), m.word(S.cmdqptr), ostream.getvalue())
 
 @pytest.mark.parametrize('command, curloc', [
     ('deposit', 'Mdepcur'),

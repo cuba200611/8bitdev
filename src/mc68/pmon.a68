@@ -403,10 +403,46 @@ examine     ldx #Mexamcur
 
 ;   show/set saved registers
 ;
-;   Registers are printed as (space-prefixed) ` n=vv` pairs of name
-;   character and 2- or 4-character value.
+;   XXX ♣tmp2
 ;
-regscmd     lda A,#'p'
+;   The registers are named with single letters `pabxcs`. With no args, the
+;   registers are printed as (space-prefixed) ` n=vv` pairs of name
+;   character and 2- or 4-character value. Otherwise arguments of a
+;   register letter followed immediately by a hexbyte or hexword (depending
+;   on register size) set register values. The argument list must be
+;   terminated by whitespace or end of input.
+;
+regscmd     jsr qwspace         ; no args after command?
+            bcs .show           ; yes, we show instead of set
+
+.argcont    ldx #Rpc
+            lda A,#'p'
+            bsr .setword
+
+.rts        rts
+
+.argerr     rts                 ; XXX should print error message
+
+.setword    ;   If next char matches A, parse a hexword and write to [X].
+            stx tmp2            ; save location
+            ldx cmdqptr
+            lda B,0,X           ; get next char
+            cba                 ; matches the arg?
+            bne .rts            ; no, carry on
+            inx                 ; consume matched char
+            jsr qhexword        ;
+            bne .argerr         ; no word, die
+            stx cmdqptr         ; consume parsed value
+            ldx tmp2            ; target location
+            lda B,qhex_out
+            sta B,0,X           ; save parsed MSB
+            lda B,qhex_out+1
+            sta B,1,X           ; save parsed LSB
+            pul B               ; remove continuation
+            pul B
+            bra .argcont        ;    because we directly continue arg loop
+
+.show       lda A,#'p'
             lda B,Rpc
             bsr prcheqval
             lda A,Rpc+1
@@ -511,6 +547,33 @@ rdline      ldx #rdlinebuf
 ;   q* - parsing
 
             include "src/mc68/qhex.a68"
+
+;   ♠cmdqptr  ♣AX Parse/consume one whitespace char at cmdqptr
+;   Return C=1 if whitespace is found, C=0 otherwise.
+;
+;   This will consume the whitespace character (by incrementing `cmdqptr`)
+;   if found. However, $00 is considered whitespace (because this still
+;   terminates e.g. argument lists) but is not consumed for obvious reasons.
+;
+qwspace     ldx cmdqptr
+            lda A,,X
+            cmp A,#$00
+            beq .noconsume
+            cmp A,#'\t'
+            beq .consume
+            cmp A,#'\n'
+            beq .consume
+            cmp A,#'\r'
+            beq .consume
+            cmp A,#' '
+            beq .consume
+            clc                 ; failure
+            rts
+
+.consume    inx
+            stx cmdqptr
+.noconsume  sec                 ; success
+            rts
 
 ; ----------------------------------------------------------------------
 ;   pr* - printing output
