@@ -293,7 +293,7 @@ def test_show_registers(m, S, R, regs):
 
     #   XXX flags should be in more human-readable format
     #   But it may be difficult to do this with expanding beyond 32 chars:
-    #        p5678 a9A bBC xDEF0 cFF s1234
+    #       p5678 a9A bBC xDEF0 cFF s1234
     #       1--------10--------20--------30-|------40
 
     expected = ' p{:04X} a{:02X} b{:02X} x{:04X} c{:02X} s{:04X}\n' \
@@ -315,12 +315,7 @@ def test_set_registers(m, S, R, cmdarg, consumed, changedregs):
     inbuf = set_rdlinebuf(m, cmdarg)
     _, ostream = loadbios(m)
 
-    #m.call(S.regscmd, trace=1) # XXX can't because of PULling return addr
-    #   Becuase of the trick we use to drop the return address.
-    m.setregs(R(pc=S.regscmd))
-    exits = (S['regscmd.rts'], S['regscmd.argerr'])
-    m.stepto(stopat=exits, maxsteps=20000)
-
+    m.call(S.regscmd)
     assert (initregs.clone(**changedregs.valued()), inbuf + consumed, b'') \
         == (examregs(m), m.word(S.cmdqptr), ostream.getvalue())
 
