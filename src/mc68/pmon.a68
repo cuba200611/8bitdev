@@ -418,6 +418,12 @@ regscmd     jsr qwspace         ; no args after command?
 .argcont    ldx #Rpc
             lda A,#'p'
             bsr .setword
+            ldx #Rx
+            lda A,#'x'
+            bsr .setword
+            ldx #Rsp
+            lda A,#'s'
+            bsr .setword
 
 .rts        rts
 

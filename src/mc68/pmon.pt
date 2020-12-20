@@ -304,9 +304,9 @@ def test_show_registers(m, S, R, regs):
     (b'pFEDC',  5,  R(pc=0xFEDC)),
    #(b'aFF',        R(a=0xFF)),
    #(b'bE0 ',       R(b=0xE0)),
-   #(b'x=7777',     R(x=0x7777)),
+    (b'x7778',  5,  R(x=0x7778)),
    #(b'c31',        R(cc=0x31)),
-   #(b's123',       R(sp=0x123)),
+    (b's123',   4,  R(sp=0x123)),
    #(b'a7b09',      R(a=0x07, b=0x09)),
 ])
 def test_set_registers(m, S, R, cmdarg, consumed, changedregs):
