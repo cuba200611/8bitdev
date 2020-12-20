@@ -137,6 +137,28 @@ def test_usepending_available(m, S, R):
     assert (0xC355, 0xC355) == (m.word(curval), m.word(S.Mpending))
     assert 0x55 == m.byte(S.stat), 'pendingval not marked as consumed'
 
+def test_parseerr_offset(m, S, R):
+    ' Test the segment that calculates current offset into rdline buffer. '
+    m.depword(S.cmdqptr, S.rdlinebuf+7)
+    m.setregs(R(pc=S['parseerr.tp0']))
+    m.stepto(stopat=[S['parseerr.tp1']])
+    assert R(a=7) == m.regs
+
+@pytest.mark.parametrize('input', [
+    #   set_rdlinebuf automatically provides different buffer offsets for these.
+    b'abc', b'def',
+])
+def test_parseerr(m, S, R, input):
+    inbuf = set_rdlinebuf(m, input)
+    _, ostream = loadbios(m)
+
+    m.setregs(R(pc=S.parseerr))
+    m.stepto(stopat=[S.cmdloop])
+
+    offset = inbuf - S.rdlinebuf
+    expected = '\a?{:02X} {:c}'.format(offset, input[0])
+    assert bytes(expected, encoding='ASCII') == ostream.getvalue()
+
 
 ####################################################################
 #   Commands (tested outside of command loop)
@@ -150,7 +172,7 @@ def set_rdlinebuf(m, input=b''):
     '''
     S = m.symtab
     inbuf = S.rdlinebuf + sum(input) % 8
-    print('rdlinebuf:{:04X}:{}'.format(inbuf, input))
+    print('rdlinebuf:{:04X} input@{:04X} {}'.format(S.rdlinebuf, inbuf, input))
     m.deposit(inbuf, input + b'\x00')
     m.depword(S.cmdqptr, inbuf)
     return inbuf
