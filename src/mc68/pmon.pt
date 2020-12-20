@@ -282,7 +282,7 @@ def examregs(m):
     R(pc=0x5678, a=0x9A, b=0xBC, x=0xDEF0, cc=0xFF, sp=0x1234),
     R(pc=0x0002, a=0x03, b=0x04, x=0x0005, cc=0x00, sp=0x0001),
 ])
-def test_show_registers(m, S, R, regs):
+def test_regscmd_show(m, S, R, regs):
     print(regs)
     depregs(m, regs)
     inbuf = set_rdlinebuf(m)
@@ -300,25 +300,33 @@ def test_show_registers(m, S, R, regs):
         .format(regs.pc, regs.a, regs.b, regs.x, regs.cc, regs.sp)
     assert (inbuf, expected) == (m.word(S.cmdqptr), output)
 
-@pytest.mark.parametrize('cmdarg, consumed, changedregs', [
-    (b'pFEDC',  5,  R(pc=0xFEDC)),
-    (b'aFF',    3,  R(a=0xFF)),
-    (b'bE0 ',   3,  R(b=0xE0)),
-    (b'x7778',  5,  R(x=0x7778)),
-    (b'c31',    3,  R(cc=0x31)),
-    (b's123',   4,  R(sp=0x123)),
-    (b'b1  ',   2,  R(b=0x01)),
-    (b'a07b9',  5,  R(a=0x07, b=0x09)),
+@pytest.mark.parametrize('cmdarg, consumed, changedregs, errmsg', [
+    (b'pFEDC',  5,  R(pc=0xFEDC),       b''),
+    (b'aFF',    3,  R(a=0xFF),          b''),
+    (b'bE0 ',   4,  R(b=0xE0),          b''),   # first trailing wspc consumed
+    (b'x7778',  5,  R(x=0x7778),        b''),
+    (b'c31',    3,  R(cc=0x31),         b''),
+    (b's123',   4,  R(sp=0x123),        b''),
+    (b'b1  ',   3,  R(b=0x01),          b''),   # first trailing wspc consumed
+    (b'a07b9',  5,  R(a=0x07, b=0x09),  b''),
+    (b'x',      0,  R(),                b'?00 x'),
+    (b'z',      0,  R(),                b'?00 z'),
+    (b'a1b2y',  4,  R(a=1, b=2),        b'?04 y'),
 ])
-def test_set_registers(m, S, R, cmdarg, consumed, changedregs):
+def test_regscmd_set(m, S, R, cmdarg, consumed, changedregs, errmsg):
     initregs = R(pc=0x0102, a=0x03, b=0x04, x=0x0506, cc=0xFF, sp=0x0708)
     depregs(m, initregs)
     inbuf = set_rdlinebuf(m, cmdarg)
     _, ostream = loadbios(m)
 
     m.call(S.regscmd)
-    assert (initregs.clone(**changedregs.valued()), inbuf + consumed, b'') \
-        == (examregs(m), m.word(S.cmdqptr), ostream.getvalue())
+    assert (initregs.clone(**changedregs.valued()),
+            hex(inbuf + consumed),
+            errmsg,
+      ) == (examregs(m),
+            hex(m.word(S.cmdqptr)),
+            ostream.getvalue()
+      )
 
 @pytest.mark.parametrize('command, curloc', [
     ('deposit', 'Mdepcur'),

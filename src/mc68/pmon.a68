@@ -252,7 +252,7 @@ cmdtbl_std
             dw      call        ; JSR to address ("kall")
             db 'q'
             dw      quitcmd     ; "quit"; exit to monitor's caller
-            db 's'
+            db 'r'
             dw      regscmd     ; show/set saved registers
             db 'x'
             dw      examine     ; examine memory
@@ -412,8 +412,40 @@ examine     ldx #Mexamcur
 ;   on register size) set register values. The argument list must be
 ;   terminated by whitespace or end of input.
 ;
-regscmd     jsr qwspace         ; no args after command?
-            bcs .show           ; yes, we show instead of set
+regscmd     jsr qwspace         ; check args after command
+            bcc .argcont        ; not whitespace, we show instead of set
+
+.show       lda A,#'p'
+            lda B,Rpc
+            jsr prchval
+            lda A,Rpc+1
+            jsr prhex
+
+            lda A,#'a'
+            lda B,Ra
+            jsr prchval
+
+            lda A,#'b'
+            lda B,Rb
+            jsr prchval
+
+            lda A,#'x'
+            lda B,Rx
+            jsr prchval
+            lda A,Rx+1
+            jsr prhex
+
+            lda A,#'c'
+            lda B,Rcc
+            jsr prchval
+
+            lda A,#'s'
+            lda B,Rsp
+            jsr prchval
+            lda A,Rsp+1
+            jsr prhex
+
+            jmp prnl            ; RTS TCO
 
 .argcont    ldx #Rpc
             lda A,#'p'
@@ -433,10 +465,10 @@ regscmd     jsr qwspace         ; no args after command?
             ldx #Rsp
             lda A,#'s'
             bsr .setword
-
-.rts        rts
-
-.argerr     rts                 ; XXX should print error message
+            ldx cmdqptr
+            jsr qwspace         ; parsed no valid arg; wspace ending arg list?
+            bcc .argerr         ; no, error
+.rts        rts                 ; otherwise command is complete
 
 .setbyte    ;   If next char matches A, parse a hexbyte and write to [X].
             stx tmp2            ; save location
@@ -474,40 +506,21 @@ regscmd     jsr qwspace         ; no args after command?
             pul B
             bra .argcont        ;    because we directly continue arg loop
 
-.show       lda A,#'p'
-            lda B,Rpc
-            bsr prcheqval
-            lda A,Rpc+1
+.argerr     lda A,#'?'
+            jsr prchar
+            lda A,#$BA          ; XXX position: need to load X w/buffer addr
+                                ;   and call SBX routine w/buffer head
             jsr prhex
+            jsr prspace
+            ldx cmdqptr
+            lda A,0,X
+            jsr prchar
+            rts
+.errmsg     db '? '
 
-            lda A,#'a'
-            lda B,Ra
-            bsr prcheqval
-
-            lda A,#'b'
-            lda B,Rb
-            bsr prcheqval
-
-            lda A,#'x'
-            lda B,Rx
-            bsr prcheqval
-            lda A,Rx+1
-            jsr prhex
-
-            lda A,#'c'
-            lda B,Rcc
-            bsr prcheqval
-
-            lda A,#'s'
-            lda B,Rsp
-            bsr prcheqval
-            lda A,Rsp+1
-            jsr prhex
-
-            jmp prnl            ; RTS TCO
 
 ;   ♣A print space, char in A, byte in B as hex
-prcheqval   psh B               ; some platforms's prchar may not preserve this
+prchval     psh B               ; some platforms's prchar may not preserve this
             psh A
             jsr prspace
             pul A
@@ -610,7 +623,7 @@ qwspace     ldx cmdqptr
 ; ----------------------------------------------------------------------
 ;   pr* - printing output
 
-;   ♣A Print value in a as hex to the character output port.
+;   ♣A Print value in A as hex to the character output port.
 ;   Falls through to prnyb.
 prhex       psh A
             lsr A
