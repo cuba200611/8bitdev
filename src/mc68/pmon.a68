@@ -418,9 +418,18 @@ regscmd     jsr qwspace         ; no args after command?
 .argcont    ldx #Rpc
             lda A,#'p'
             bsr .setword
+            ldx #Ra
+            lda A,#'a'
+            bsr .setbyte
+            ldx #Rb
+            lda A,#'b'
+            bsr .setbyte
             ldx #Rx
             lda A,#'x'
             bsr .setword
+            ldx #Rcc
+            lda A,#'c'
+            bsr .setbyte
             ldx #Rsp
             lda A,#'s'
             bsr .setword
@@ -428,6 +437,23 @@ regscmd     jsr qwspace         ; no args after command?
 .rts        rts
 
 .argerr     rts                 ; XXX should print error message
+
+.setbyte    ;   If next char matches A, parse a hexbyte and write to [X].
+            stx tmp2            ; save location
+            ldx cmdqptr
+            lda B,0,X           ; get next char
+            cba                 ; matches the arg?
+            bne .rts            ; no, carry on
+            inx                 ; consume matched char
+            jsr qhexbyte
+            bne .argerr         ; no word, die
+            stx cmdqptr         ; consume parsed value
+            ldx tmp2            ; target location
+            lda B,qhex_out+1
+            sta B,0,X           ; save parsed LSB
+            pul B               ; remove continuation
+            pul B
+            bra .argcont        ;    because we directly continue arg loop
 
 .setword    ;   If next char matches A, parse a hexword and write to [X].
             stx tmp2            ; save location

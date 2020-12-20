@@ -302,12 +302,13 @@ def test_show_registers(m, S, R, regs):
 
 @pytest.mark.parametrize('cmdarg, consumed, changedregs', [
     (b'pFEDC',  5,  R(pc=0xFEDC)),
-   #(b'aFF',        R(a=0xFF)),
-   #(b'bE0 ',       R(b=0xE0)),
+    (b'aFF',    3,  R(a=0xFF)),
+    (b'bE0 ',   3,  R(b=0xE0)),
     (b'x7778',  5,  R(x=0x7778)),
-   #(b'c31',        R(cc=0x31)),
+    (b'c31',    3,  R(cc=0x31)),
     (b's123',   4,  R(sp=0x123)),
-   #(b'a7b09',      R(a=0x07, b=0x09)),
+    (b'b1  ',   2,  R(b=0x01)),
+    (b'a07b9',  5,  R(a=0x07, b=0x09)),
 ])
 def test_set_registers(m, S, R, cmdarg, consumed, changedregs):
     initregs = R(pc=0x0102, a=0x03, b=0x04, x=0x0506, cc=0xFF, sp=0x0708)
