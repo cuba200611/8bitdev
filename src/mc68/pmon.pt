@@ -236,6 +236,36 @@ def test_deposit(m, S, R, addr, parselen, cmdarg, data):
     assert (inbuf,  inbuf + parselen,   guarded) \
         == (inbuf,  m.word(S.cmdqptr),  m.bytes(addr-1, len(guarded)))
 
+def dep_examine_defaults(m, addr=0x000):
+    ' Default parameter values for test_examine_* '
+    S = m.symtab
+    m.depword(S.Mexamcur, addr)
+    m.deposit(S.Mexamwidth, 8)
+    m.deposit(S.Mexamlines, 2)
+
+@pytest.mark.parametrize('err, consumed, cmdarg', [
+    ('',     0,  b''),
+    ('',     2,  b'w1'),
+    ('',     3,  b'W1 '),   # first trailing whitespace consumed
+    ('',     3,  b'L1  '),
+    ('00 x', 0,  b'x'),
+    ('09 g', 2,  b'w1g'),   # err msg offset includes set_rdlinebuf offset
+])
+def test_examine_parseargs(m, S, R, cmdarg, consumed, err):
+    inbuf = set_rdlinebuf(m, cmdarg)
+    _, ostream = loadbios(m)
+    dep_examine_defaults(m)
+
+    m.call(S.examine)
+    #   Here an `EOFError: No more input available from streamiof` indicates
+    #   that the stack handling is probably incorrect and cmdloop has
+    output = str(ostream.getvalue(), encoding='ASCII')
+    # XXX assert stack pointer
+    print(repr(output))
+
+    assert consumed == m.word(S.cmdqptr) - inbuf
+    if err != '': assert '\x07?' + err == output
+
 @pytest.mark.parametrize(
     '  addr, cmdarg, width, lines, expmatch', [
     (0x7FFF, b'',        8,   2, '7FFF: 00 40 41 42 43 44 45 46\n'
@@ -245,11 +275,9 @@ def test_deposit(m, S, R, addr, parselen, cmdarg, data):
     (0x8002, b'L1fW2',   2,  31, '8002: 42 43\n.*803E: 7E 7F\n'),
     (0x8003, b'l3w10',  16,   3, '8003: 43 .* 52\n8013: 53.*\n8023: 63.*72\n'),
 ], ids=tmc_tid)
-def test_examine(m, S, R, addr, width, cmdarg, lines, expmatch):
+def test_examine_output(m, S, R, addr, width, cmdarg, lines, expmatch):
     m.deposit(0x8000, range(0x40, 0x80))    # test data to dump
-    m.depword(S.Mexamcur, addr)
-    m.deposit(S.Mexamwidth, 8)              # default values for tests
-    m.deposit(S.Mexamlines, 2)
+    dep_examine_defaults(m, addr)
     inbuf = set_rdlinebuf(m, cmdarg)
     _, ostream = loadbios(m)
 

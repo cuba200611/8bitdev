@@ -365,7 +365,7 @@ examine     ldx #Mexamcur
             jsr usepending
 
 .nextarg    jsr qwspace         ; end of arguments?
-            bcs .noarg
+            bcs .print
             lda A,0,X           ; qwspace returned cmdqptr in X
             cmp A,#'l'          ; length opt?
             beq .linearg
@@ -396,7 +396,7 @@ examine     ldx #Mexamcur
             sta A,Mexamwidth    ; set argument
             bra .nextarg
 
-.noarg      lda A,Mexamlines    ; lines to print
+.print      lda A,Mexamlines    ; lines to print
             sta A,tmp1          ; set remaining lines left to print
             ldx Mexamcur        ; load start location to examine
 
