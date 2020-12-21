@@ -191,8 +191,14 @@ parseerr    jsr errbeep
             jsr prspace
             ldx cmdqptr
             lda A,0,X
+            cmp A,#' '+1
+            bcs .hexchar        ; space and below prints as hex
+            cmp A,#$7F
+            bcc .hexchar        ; DEL and above prints as hex
             jsr prchar
-            jmp cmdloop
+            bra .exit
+.hexchar    jsr prhex
+.exit       jmp cmdloop
 
 savepending stx cmdqptr         ; consume the parsed text
             ldx qhex_out        ; copy parsed value into pending
